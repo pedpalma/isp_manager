@@ -128,7 +128,7 @@ migration:
 .PHONY: health
 # Testa o endpoint /health da API
 health:
-	@curl -fsS http://localhost:8000/health | jq . || echo "API não respondeu"
+	@curl -fsS http://localhost:8000/health | jq . || echo "No API response"
 
 .PHONY: ping-olt
 # Testa conectividade do container da API com uma OLT (make ping-olt ip=10.0.0.1)
