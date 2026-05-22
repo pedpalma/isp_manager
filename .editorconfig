@@ -1,18 +1,83 @@
 root = true
 
+# --> DEFAULTS <--
 [*]
 charset = utf-8
 end_of_line = lf
-insert_final_new_line = true
+insert_final_newline = true
 trim_trailing_whitespace = true
-ident_style = space
-ident_size = 4
+indent_style = space
+indent_size = 4
 
-[*.{js,jsx,ts,tsx,json,jsonc,yml,yaml,css,scss,html}]
-ident_size = 2
+# --> PYTHON <--
+[*.py]
+indent_style = space
+indent_size = 4
+max_line_length = 88
 
+# --> TYPESCRIPT / JAVASCRIPT <--
+[*.{ts,tsx,js,jsx,mjs,cjs}]
+indent_style = space
+indent_size = 2
+
+# --> CONFIGS E DADOS ESTRUTURADOS <--
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.json]
+indent_style = space
+indent_size = 2
+
+[*.toml]
+indent_style = space
+indent_size = 4
+
+# --> DOCUMENTAÇÃO <--
 [*.md]
+indent_style = space
+indent_size = 2
 trim_trailing_whitespace = false
 
-[Makefile]
+# --> SHELL E SCRIPTS <--
+[*.sh]
+indent_style = space
+indent_size = 2
+[*.{bash,zsh,fish}]
+indent_style = space
+indent_size = 2
+
+# --> DOCKER <--
+[{Dockerfile,Dockerfile.*,*.dockerfile}]
+indent_style = space
+indent_size = 2
+
+[docker-compose*.yml]
+indent_style = space
+indent_size = 2
+
+# --> MAKEFILE <--
+[{Makefile,makefile,GNUmakefile,*.mk}]
 indent_style = tab
+
+# --> SQL <--
+[*.sql]
+indent_style = space
+indent_size = 4
+
+# --> NGINX <--
+[*.conf]
+indent_style = space
+indent_size = 2
+
+# --> CSS / SCSS / Tailwind <--
+[*.{css,scss,sass}]
+indent_style = space
+indent_size = 2
+
+# --> ARQUIVOS QUE NÃO DEVEM SER FORMATADOS <--
+[{package-lock.json,yarn.lock,pnpm-lock.yaml,requirements.txt}]
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+[backend/alembic/versions/0001_initial_schema.py]
+trim_trailing_whitespace = false
