@@ -16,7 +16,7 @@ htmlcov/
 .pytype/
 .hypothesis/
 
-# Ambientes virtuais
+# --- Ambientes virtuais ---
 .venv/
 venv/
 env/
