@@ -1,80 +1,182 @@
-# --> Python <--
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-.installed.cfg
-*.egg
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.mypy_cache/
-.ruff_cache/
-.pytype/
-.hypothesis/
-
-# --> Ambientes virtuais <--
-.venv/
-venv/
-env/
-
-# --> Node / Next.js <--
-node_modules/
-.next/
-out/
-.turbo/
-*.tsbuildinfo
-next-env.d.ts
-
-# --> Logs <--
-*.log
-logs/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# --> Ambiente <--
+# --> SEGREDOS E AMBIENTE <--
 .env
 .env.*
 !.env.example
 !.env.*.example
+
+# Chaves e certificados.
 *.pem
 *.key
-secrets/
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*.gpg
 
-# --> IDE <--
-.idea/
-.vscode/
-!.vscode/extensions.json
-!.vscode/settings.shared.json
+# Pastas de secrets.
+secrets/
+.secrets/
+
+# --> PYTHON / BACKEND <--
+
+# Bytecode e caches do interpretador.
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtualenvs locais.
+.venv/
+venv/
+env/
+ENV/
+
+# Empacotamento e distribuição.
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+wheels/
+*.whl
+
+# Testes e cobertura.
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+.hypothesis/
+
+# Type checkers e linters.
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+
+# Notebooks.
+.ipynb_checkpoints/
+
+# --> NODE / FRONTEND (Next.js) <--
+node_modules/
+.next/
+out/
+.turbo/
+.vercel/
+
+# Logs do npm/yarn/pnpm.
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Cache de build.
+*.tsbuildinfo
+next-env.d.ts
+
+# --> DOCKER <--
+# Override local do compose.
+docker-compose.override.yml
+
+# Volumes mapeados localmente.
+data/
+volumes/
+
+# Arquivos temporários do Docker Buildx.
+.docker/
+
+# --> BANCO DE DADOS, DUMPS E BACKUPS LOCAIS <--
+*.sql.gz
+*.dump
+*.bak
+backups/
+dumps/
+
+# Exceção: scripts SQL versionados.
+!infra/docker/postgres/init.sql
+!backend/alembic/versions/*.sql
+
+# --> LOGS E ARQUIVOS TEMPORÁRIOS <--
+*.log
+logs/
+*.pid
+*.seed
 *.swp
 *.swo
+*~
+.tmp/
+tmp/
+
+# --> IDE <--
+# VSCode.
+.vscode/*
+!.vscode/settings.json.example
+!.vscode/extensions.json
+
+# JetBrains (PyCharm, WebStorm).
+.idea/
+*.iml
+*.iws
+
+# Vim / Emacs.
+*.swp
+*.swo
+*~
+.\#*
+\#*\#
+
+# Sublime.
+*.sublime-workspace
+*.sublime-project
+
+# --> SISTEMA OPERACIONAL <--
+# macOS.
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows.
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
-# --> Docker <--
-*.pid
-.docker-cache/
+# Linux.
+.directory
+.Trash-*
 
-# --> Backups e dumps <--
-*.dump
-*.sql.gz
-*.tar.gz
-backups/
+# --> RUNTIME LOCAL <--
+# Pastas de dados de Prometheus/Grafana.
+prometheus_data/
+grafana_data/
+loki_data/
 
-# --> Coverage / Test artifacts <--
-coverage/
-test-results/
-playwright-report/
+# Profile reports.
+*.prof
+*.svg.profile
 
-# --> Banco local <--
-*.db
-*.sqlite
-*.sqlite3
+# --> ARQUIVOS GERADOS POR FERRAMENTAS DO PROJETO <--
+# Relatórios de auditoria de dependências.
+pip-audit.json
+npm-audit.json
+trivy-report.json
 
-# --> Específico do projeto <--
-/infra/backup/dumps/
-/backend/htmlcov/
+# Schemas exportados automaticamente.
+backend/openapi.json
+frontend/src/lib/api/generated/
+
+# --> EXCEÇÕES IMPORTANTES <--
+# Migrations do Alembic.
+!backend/alembic/versions/
+
+# Templates de comandos YAML por fabricante.
+!backend/app/adapters/olt/commands/
+
+# Configurações compartilhadas de Docker/Nginx.
+!infra/docker/
+!infra/nginx/
