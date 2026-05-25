@@ -85,35 +85,6 @@ Todos os comandos disponíveis em `make help`. Os mais usados:
 
 ---
 
-## Estrutura do projeto
-
-isp_manager/
-├── backend/ # FastAPI + Celery (Python 3.12)
-│ ├── app/ # Código da aplicação
-│ ├── alembic/ # Migrations do banco
-│ ├── tests/ # Testes unit / integration / e2e
-│ └── scripts/ # Utilitários (seed, importação, manutenção)
-│
-├── frontend/ # Next.js 15 (TypeScript, App Router)
-│ └── src/
-│
-├── infra/ # Infraestrutura (Docker, Nginx, scripts)
-│ ├── docker/ # Dockerfiles e configs por serviço
-│ ├── proxmox/ # Templates de provisionamento de VMs
-│ ├── backup/ # Scripts de backup/restore Postgres
-│ └── scripts/ # Cron jobs, partições, etc.
-│
-├── docs/ # Documentação detalhada
-│ ├── architecture/
-│ ├── runbooks/
-│ └── api/
-│
-├── docker-compose.yml # Ambiente de desenvolvimento
-├── docker-compose.prod.yml # Overrides para produção (Proxmox)
-└── Makefile # Atalhos de comando
-
----
-
 ## Licença
 
 Uso interno. Versão comercial planejada em fork separado.
