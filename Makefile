@@ -1,136 +1,361 @@
-# ==> Atalhos para tarefas comuns de desenvolvimento.
+# Makefile — isp_manager
 
-# Carrega o .env (se existir) e exporta as variáveis pros sub-comandos
-ifneq (,$(wildcard ./.env))
-	include .env
-	export
-endif
+# Shell explícito.
+SHELL := /bin/bash
 
 COMPOSE := docker compose
 
+# Serviços nomeados.
+SERVICE_API      := api
+SERVICE_WORKER   := worker
+SERVICE_FRONTEND := frontend
+SERVICE_DB       := postgres
+SERVICE_REDIS    := redis
+
+# Arquivos .env e .env.example.
+ENV_FILE         := .env
+ENV_EXAMPLE      := .env.example
+
+# Cores para output.
+COLOR_RESET  := \033[0m
+COLOR_BOLD   := \033[1m
+COLOR_GREEN  := \033[32m
+COLOR_YELLOW := \033[33m
+COLOR_RED    := \033[31m
+COLOR_CYAN   := \033[36m
+
+# Alvo default quando rodar `make` sem argumentos.
 .DEFAULT_GOAL := help
 
-# --> Help <--
+# HELP
 
 .PHONY: help
-# Lista todos os comandos disponíveis
-help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| sort \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+help: ## Lista todos os comandos disponíveis
+	@echo ""
+	@echo "$(COLOR_BOLD)isp_manager — comandos disponíveis$(COLOR_RESET)"
+	@echo ""
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_CYAN)%-22s$(COLOR_RESET) %s\n", $$1, $$2}' | \
+		sort
+	@echo ""
 
+# SETUP INICIAL
 
-# --> Setup inicial <--
-.PHONY: init
-# Cria .env a partir do exemplo (se não existir)
-init:
-	@if [ ! -f .env ]; then \
-		cp .env.example .env; \
-		echo "Archive .env created from .env.example."; \
+.PHONY: setup
+setup: ## Configuração inicial do projeto (primeira vez)
+	@echo "$(COLOR_BOLD)Configurando isp_manager...$(COLOR_RESET)"
+	@$(MAKE) check-deps
+	@$(MAKE) env-init
+	@$(MAKE) build
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Setup concluído!$(COLOR_RESET)"
+	@echo ""
+	@echo "Próximos passos:"
+	@echo "  1. Revise o arquivo $(COLOR_YELLOW).env$(COLOR_RESET) e ajuste senhas"
+	@echo "  2. Rode $(COLOR_CYAN)make up$(COLOR_RESET) para iniciar os serviços"
+	@echo "  3. Rode $(COLOR_CYAN)make migrate$(COLOR_RESET) para aplicar migrations"
+	@echo ""
+
+.PHONY: check-deps
+check-deps: ## Verifica se dependências do host estão instaladas
+	@echo "Verificando dependências..."
+	@command -v docker >/dev/null 2>&1 || { echo "$(COLOR_RED)✗ docker não encontrado$(COLOR_RESET)"; exit 1; }
+	@docker compose version >/dev/null 2>&1 || { echo "$(COLOR_RED)✗ docker compose v2 não encontrado$(COLOR_RESET)"; exit 1; }
+	@command -v git >/dev/null 2>&1 || { echo "$(COLOR_RED)✗ git não encontrado$(COLOR_RESET)"; exit 1; }
+	@echo "$(COLOR_GREEN)✓ Dependências OK$(COLOR_RESET)"
+
+.PHONY: env-init
+env-init: ## Cria .env a partir do .env.example (se não existir)
+	@if [ ! -f $(ENV_FILE) ]; then \
+		cp $(ENV_EXAMPLE) $(ENV_FILE); \
+		echo "$(COLOR_GREEN)✓ Criado $(ENV_FILE)$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)⚠ Edite $(ENV_FILE) e ajuste senhas antes de subir o ambiente.$(COLOR_RESET)"; \
 	else \
-		echo ".env already exists. Nothing made."; \
+		echo "$(COLOR_YELLOW)⚠ $(ENV_FILE) já existe — não sobrescrito.$(COLOR_RESET)"; \
 	fi
 
+.PHONY: secret
+secret: ## Gera uma chave aleatória segura (use para API_SECRET_KEY)
+	@openssl rand -hex 32
 
-# --> Lifecycle dos containers <--
-.PHONY: build
-# Builda as imagens
-build:
-	$(COMPOSE) build
+
+# CICLO DE VIDA DOS CONTAINERS
 
 .PHONY: up
-# Sobe todos os serviços em background
-up:
-	$(COMPOSE) up -d
+up: ## Sobe todos os serviços em background
+	@$(COMPOSE) up -d
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Serviços iniciados$(COLOR_RESET)"
+	@echo "  API:      http://localhost:8000"
+	@echo "  Docs:     http://localhost:8000/docs"
+	@echo "  Frontend: http://localhost:3000"
 
 .PHONY: up-fg
-# Sobe todos os serviços em foreground (logs na tela)
-up-fg:
-	$(COMPOSE) up
+up-fg: ## Sobe todos os serviços em primeiro plano (logs ao vivo, Ctrl+C para parar)
+	@$(COMPOSE) up
 
 .PHONY: down
-# Para e remove os containers (mantém volumes)
-down:
-	$(COMPOSE) down
-
-.PHONY: down-volumes
-# Para e remove containers + volumes
-down-volumes:
-	$(COMPOSE) down -v
+down: ## Para todos os serviços (preserva volumes)
+	@$(COMPOSE) down
 
 .PHONY: restart
-#  Reinicia todos os serviços
-restart:
-	$(COMPOSE) restart
+restart: down up ## Reinicia todos os serviços
 
-# Mostra status dos containers.PHONY: ps
-ps:
-	$(COMPOSE) ps
+.PHONY: restart-api
+restart-api: ## Reinicia apenas a API
+	@$(COMPOSE) restart $(SERVICE_API)
+
+.PHONY: restart-worker
+restart-worker: ## Reinicia apenas o worker Celery
+	@$(COMPOSE) restart $(SERVICE_WORKER)
+
+.PHONY: ps
+ps: ## Lista status dos containers
+	@$(COMPOSE) ps
+
+.PHONY: stop
+stop: ## Para containers sem removê-los
+	@$(COMPOSE) stop
+
+.PHONY: start
+start: ## Inicia containers parados (sem rebuild)
+	@$(COMPOSE) start
 
 
-# --> Logs <--
+# BUILD
+
+.PHONY: build
+build: ## Builda todas as imagens (usa cache)
+	@$(COMPOSE) build
+
+.PHONY: rebuild
+rebuild: ## Rebuild forçado sem cache (use após mudar Dockerfile ou deps)
+	@$(COMPOSE) build --no-cache
+
+.PHONY: pull
+pull: ## Atualiza imagens base do registry
+	@$(COMPOSE) pull
+
+
+# LOGS
+
 .PHONY: logs
-# Logs de todos os serviços (follow)
-logs:
-	$(COMPOSE) logs -f --tail=100
+logs: ## Logs de todos os serviços (follow)
+	@$(COMPOSE) logs -f --tail=100
 
 .PHONY: logs-api
-# Logs da API
-logs-api:
-	$(COMPOSE) logs -f --tail=100 api
+logs-api: ## Logs apenas da API
+	@$(COMPOSE) logs -f --tail=200 $(SERVICE_API)
 
 .PHONY: logs-worker
-# Logs do worker
-logs-worker:
-	$(COMPOSE) logs -f --tail=100 worker
+logs-worker: ## Logs apenas do worker Celery
+	@$(COMPOSE) logs -f --tail=200 $(SERVICE_WORKER)
+
+.PHONY: logs-frontend
+logs-frontend: ## Logs apenas do frontend
+	@$(COMPOSE) logs -f --tail=200 $(SERVICE_FRONTEND)
 
 .PHONY: logs-db
-# Logs do Postgres
-logs-db:
-	$(COMPOSE) logs -f --tail=100 postgres
+logs-db: ## Logs apenas do Postgres
+	@$(COMPOSE) logs -f --tail=200 $(SERVICE_DB)
 
 
-# --> Shell <--
+# ACESSO INTERATIVO (shells)
+
 .PHONY: shell-api
-# Abre shell dentro do container da API
-shell-api:
-	$(COMPOSE) exec api bash
+shell-api: ## Bash dentro do container da API
+	@$(COMPOSE) exec $(SERVICE_API) bash
 
 .PHONY: shell-worker
-# Abre shell dentro do container do worker
-shell-worker:
-	$(COMPOSE) exec worker bash
+shell-worker: ## Bash dentro do container do worker
+	@$(COMPOSE) exec $(SERVICE_WORKER) bash
+
+.PHONY: shell-frontend
+shell-frontend: ## Bash dentro do container do frontend
+	@$(COMPOSE) exec $(SERVICE_FRONTEND) sh
 
 .PHONY: shell-db
-# Abre psql no Postgres
-shell-db:
-	$(COMPOSE) exec postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+shell-db: ## Console psql conectado ao banco
+	@$(COMPOSE) exec $(SERVICE_DB) psql -U $${POSTGRES_APP_USER:-isp_app} -d $${POSTGRES_DB:-isp_manager}
+
+.PHONY: shell-db-root
+shell-db-root: ## Console psql como superuser (use com cuidado)
+	@$(COMPOSE) exec $(SERVICE_DB) psql -U $${POSTGRES_ROOT_USER:-postgres} -d $${POSTGRES_DB:-isp_manager}
+
+.PHONY: shell-redis
+shell-redis: ## redis-cli conectado ao Redis
+	@$(COMPOSE) exec $(SERVICE_REDIS) redis-cli
+
+.PHONY: python
+python: ## Abre REPL Python dentro da API (com app carregada)
+	@$(COMPOSE) exec $(SERVICE_API) python
 
 
-# --> Banco / Migrations <--
+# MIGRATIONS (Alembic)
+
 .PHONY: migrate
-# Aplica migrations pendentes
-migrate:
-	$(COMPOSE) exec api alembic upgrade head
+migrate: ## Aplica todas as migrations pendentes
+	@$(COMPOSE) exec $(SERVICE_API) alembic upgrade head
 
 .PHONY: migrate-down
-# Reverte a última migration
-migrate-down:
-	$(COMPOSE) exec api alembic downgrade -1
+migrate-down: ## Reverte a última migration (CUIDADO em produção)
+	@$(COMPOSE) exec $(SERVICE_API) alembic downgrade -1
 
 .PHONY: migration
-# Cria nova migration (make migration name="add_xxx")
-migration:
-	$(COMPOSE) exec api alembic revision --autogenerate -m "$(name)"
+migration: ## Cria nova migration. Uso: make migration m="descrição"
+	@if [ -z "$(m)" ]; then \
+		echo "$(COLOR_RED)✗ Faltou a mensagem. Use: make migration m=\"descrição\"$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@$(COMPOSE) exec $(SERVICE_API) alembic revision --autogenerate -m "$(m)"
+
+.PHONY: migration-empty
+migration-empty: ## Cria migration vazia (para SQL raw). Uso: make migration-empty m="descrição"
+	@if [ -z "$(m)" ]; then \
+		echo "$(COLOR_RED)✗ Faltou a mensagem. Use: make migration-empty m=\"descrição\"$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@$(COMPOSE) exec $(SERVICE_API) alembic revision -m "$(m)"
+
+.PHONY: migration-status
+migration-status: ## Mostra revisão atual e migrations pendentes
+	@$(COMPOSE) exec $(SERVICE_API) alembic current
+	@echo ""
+	@$(COMPOSE) exec $(SERVICE_API) alembic history --indicate-current
 
 
-# --> Diagnóstico <--
-.PHONY: health
-# Testa o endpoint /health da API
-health:
-	@curl -fsS http://localhost:8000/health | jq . || echo "No API response"
+# BANCO DE DADOS — utilitários
 
-.PHONY: ping-olt
-# Testa conectividade do container da API com uma OLT (make ping-olt ip=10.0.0.1)
-ping-olt:
-	$(COMPOSE) exec api ping -c 3 $(ip)
+.PHONY: db-dump
+db-dump: ## Faz dump do banco para arquivo (./backups/dump_TIMESTAMP.sql.gz)
+	@mkdir -p backups
+	@TIMESTAMP=$$(date +%Y%m%d_%H%M%S); \
+	$(COMPOSE) exec -T $(SERVICE_DB) pg_dump -U $${POSTGRES_ROOT_USER:-postgres} -d $${POSTGRES_DB:-isp_manager} | gzip > backups/dump_$$TIMESTAMP.sql.gz; \
+	echo "$(COLOR_GREEN)✓ Dump salvo em backups/dump_$$TIMESTAMP.sql.gz$(COLOR_RESET)"
+
+.PHONY: db-reset
+db-reset: ## DESTRUTIVO: apaga e recria o banco vazio
+	@echo "$(COLOR_RED)⚠ Isso vai APAGAR todos os dados do banco.$(COLOR_RESET)"
+	@read -p "Digite 'sim' para confirmar: " confirm; \
+	if [ "$$confirm" = "sim" ]; then \
+		$(COMPOSE) down -v; \
+		$(COMPOSE) up -d $(SERVICE_DB); \
+		echo "$(COLOR_YELLOW)Aguardando Postgres ficar pronto...$(COLOR_RESET)"; \
+		sleep 5; \
+		$(MAKE) up; \
+		sleep 3; \
+		$(MAKE) migrate; \
+		echo "$(COLOR_GREEN)✓ Banco resetado.$(COLOR_RESET)"; \
+	else \
+		echo "Cancelado."; \
+	fi
+
+.PHONY: db-seed
+db-seed: ## Popula banco com dados de seed (fabricantes, grupos)
+	@$(COMPOSE) exec $(SERVICE_API) python -m scripts.seed_db
+
+
+# TESTES E QUALIDADE
+
+.PHONY: test
+test: ## Roda toda a suíte de testes (unit + integration + e2e)
+	@$(COMPOSE) exec $(SERVICE_API) pytest
+
+.PHONY: test-unit
+test-unit: ## Roda apenas testes unitários
+	@$(COMPOSE) exec $(SERVICE_API) pytest tests/unit
+
+.PHONY: test-integration
+test-integration: ## Roda apenas testes de integração
+	@$(COMPOSE) exec $(SERVICE_API) pytest tests/integration
+
+.PHONY: test-e2e
+test-e2e: ## Roda apenas testes end-to-end
+	@$(COMPOSE) exec $(SERVICE_API) pytest tests/e2e
+
+.PHONY: test-cov
+test-cov: ## Roda testes com relatório de cobertura
+	@$(COMPOSE) exec $(SERVICE_API) pytest --cov=app --cov-report=term-missing --cov-report=html
+
+.PHONY: lint
+lint: ## Roda linters (ruff + mypy) no backend
+	@$(COMPOSE) exec $(SERVICE_API) ruff check app tests
+	@$(COMPOSE) exec $(SERVICE_API) mypy app
+
+.PHONY: format
+format: ## Formata código (ruff format) no backend
+	@$(COMPOSE) exec $(SERVICE_API) ruff format app tests
+	@$(COMPOSE) exec $(SERVICE_API) ruff check --fix app tests
+
+.PHONY: lint-frontend
+lint-frontend: ## Roda lint no frontend
+	@$(COMPOSE) exec $(SERVICE_FRONTEND) npm run lint
+
+
+# DEPENDÊNCIAS (pip-tools)
+
+.PHONY: deps-compile
+deps-compile: ## Recompila requirements.txt a partir de requirements.in
+	@$(COMPOSE) exec $(SERVICE_API) pip-compile requirements.in --output-file requirements.txt
+
+.PHONY: deps-upgrade
+deps-upgrade: ## Atualiza todas as dependências para versões mais recentes
+	@$(COMPOSE) exec $(SERVICE_API) pip-compile --upgrade requirements.in --output-file requirements.txt
+
+.PHONY: deps-sync
+deps-sync: ## Sincroniza venv com requirements.txt (dentro do container)
+	@$(COMPOSE) exec $(SERVICE_API) pip-sync requirements.txt
+
+
+# WORKER E TAREFAS
+
+.PHONY: worker-inspect
+worker-inspect: ## Lista tasks ativas no worker
+	@$(COMPOSE) exec $(SERVICE_WORKER) celery -A app.celery_app inspect active
+
+.PHONY: worker-purge
+worker-purge: ## Limpa fila do Celery (CUIDADO: descarta tarefas pendentes)
+	@$(COMPOSE) exec $(SERVICE_WORKER) celery -A app.celery_app purge -f
+
+
+# LIMPEZA
+
+.PHONY: clean
+clean: ## Para containers e remove volumes anônimos
+	@$(COMPOSE) down --remove-orphans
+
+.PHONY: clean-all
+clean-all: ## DESTRUTIVO: para tudo, remove volumes nomeados e imagens
+	@echo "$(COLOR_RED)⚠ Isso vai apagar volumes (incluindo banco) e imagens.$(COLOR_RESET)"
+	@read -p "Digite 'sim' para confirmar: " confirm; \
+	if [ "$$confirm" = "sim" ]; then \
+		$(COMPOSE) down -v --remove-orphans --rmi local; \
+		echo "$(COLOR_GREEN)✓ Limpeza completa.$(COLOR_RESET)"; \
+	else \
+		echo "Cancelado."; \
+	fi
+
+.PHONY: prune
+prune: ## Remove containers/imagens/volumes do Docker NÃO usados (sistema todo)
+	@docker system prune -f
+
+
+# INFORMAÇÕES
+
+.PHONY: info
+info: ## Mostra informações úteis do ambiente
+	@echo ""
+	@echo "$(COLOR_BOLD)isp_manager — info do ambiente$(COLOR_RESET)"
+	@echo ""
+	@echo "  Docker:         $$(docker --version)"
+	@echo "  Compose:        $$(docker compose version --short)"
+	@echo "  Git branch:     $$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'não é repo git')"
+	@echo "  Git commit:     $$(git rev-parse --short HEAD 2>/dev/null || echo 'sem commits')"
+	@echo "  .env existe:    $$([ -f $(ENV_FILE) ] && echo 'sim' || echo 'NÃO')"
+	@echo ""
+	@$(COMPOSE) ps
+	@echo ""
+
+.PHONY: version
+version: ## Mostra versão da aplicação
+	@$(COMPOSE) exec $(SERVICE_API) python -c "from app.core.config import settings; print(settings.app_version)" 2>/dev/null || echo "API não está rodando"
