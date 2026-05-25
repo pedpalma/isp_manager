@@ -1,52 +1,121 @@
-# OSS-ISP
+# isp_manager
 
-Sistema OSS/BSS para provedor de internet. Substitui UNM2000 e NetNumen.
+Sistema OSS/BSS para provedor de internet (ISP), oferecendo descoberta, provisionamento e monitoramento de ONUs/ONTs em redes GPON.
+
+> **Status:** em desenvolvimento (V1).
+
+---
+
+## Capacidades (V1)
+
+- **Descoberta** de ONUs/ONTs não provisionadas na rede
+- **Leitura de sinal óptico** (RX/TX) sob demanda e periódica
+- **Provisionamento** de ONUs/ONTs com rollback em caso de falha
+- **Auditoria completa** de comandos enviados às OLTs
+- **Base para integração** com ERP IXC
 
 ## Stack
 
-- **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0 (async), Celery
-- **Banco:** PostgreSQL 16
-- **Cache/Broker:** Redis 7
-- **Cofre:** HashiCorp Vault
-- **Frontend:** Next.js 15 (App Router), React 19, Tailwind, shadcn/ui
-- **Infra:** Docker Compose em Proxmox
+| Camada   | Tecnologia                                    |
+| -------- | --------------------------------------------- |
+| Backend  | Python 3.12, FastAPI, SQLAlchemy 2.0 (async)  |
+| Worker   | Celery + Redis                                |
+| Banco    | PostgreSQL 17                                 |
+| Frontend | Next.js 15 (App Router), TypeScript, Tailwind |
+| Infra    | Docker Compose, deploy em Proxmox             |
 
-## Estrutura
+---
 
-```
-backend/    API FastAPI + worker Celery (mesma base de código)
-frontend/   App Next.js
-infra/      Dockerfiles, scripts, nginx, backups
-docs/       ADRs e runbooks operacionais
-```
+## Pré-requisitos
 
-## Começando
+- **Docker** 24+ e **Docker Compose** v2
+- **Make** (`build-essential` no Debian/Ubuntu)
+- **Git**
+- **Python 3.12** (opcional)
+- **Node.js 20+** (opcional)
 
-```bash
-cp .env.example .env
-make up         # sobe tudo
-make migrate    # aplica migrações
-make seed       # popula dados iniciais
-```
+---
 
-API: http://localhost:8000/docs
-Frontend: http://localhost:3000
+## Quickstart
 
-## Comandos úteis
+Primeira execução:
 
 ```bash
-make up          # docker compose up -d
-make down        # docker compose down
-make logs        # logs de todos os serviços
-make migrate     # alembic upgrade head
-make migration   # alembic revision --autogenerate
-make test        # pytest no backend
-make lint        # ruff + mypy
-make shell-api   # bash no container da API
-make shell-db    # psql no postgres
+git clone <url-do-repo> isp_manager
+cd isp_manager
+make setup
+make up
+make migrate
 ```
 
-## Documentação
+Acesso:
 
-- `docs/architecture/` — decisões arquiteturais (ADRs)
-- `docs/runbooks/` — procedimentos operacionais
+- API: <http://localhost:8000>
+- Docs interativos: <http://localhost:8000/docs>
+- Frontend: <http://localhost:3000>
+- Postgres: `localhost:5432` (credenciais no `.env`)
+
+Para parar:
+
+```bash
+make down
+```
+
+---
+
+## Comandos principais
+
+Todos os comandos disponíveis em `make help`. Os mais usados:
+
+| Comando                        | O que faz                            |
+| ------------------------------ | ------------------------------------ |
+| `make up`                      | Sobe todos os serviços em background |
+| `make down`                    | Para todos os serviços               |
+| `make logs`                    | Exibe logs de todos os serviços      |
+| `make logs-api`                | Logs só do backend                   |
+| `make logs-worker`             | Logs só do worker Celery             |
+| `make shell-api`               | Bash dentro do container da API      |
+| `make shell-db`                | Console psql conectado ao banco      |
+| `make migrate`                 | Aplica migrations pendentes          |
+| `make migration m="descrição"` | Cria nova migration                  |
+| `make test`                    | Executa suíte de testes              |
+| `make lint`                    | Roda Ruff + mypy                     |
+| `make format`                  | Formata código com Ruff              |
+| `make rebuild`                 | Rebuild forçado das imagens          |
+
+---
+
+## Estrutura do projeto
+
+isp_manager/
+├── backend/ # FastAPI + Celery (Python 3.12)
+│ ├── app/ # Código da aplicação
+│ ├── alembic/ # Migrations do banco
+│ ├── tests/ # Testes unit / integration / e2e
+│ └── scripts/ # Utilitários (seed, importação, manutenção)
+│
+├── frontend/ # Next.js 15 (TypeScript, App Router)
+│ └── src/
+│
+├── infra/ # Infraestrutura (Docker, Nginx, scripts)
+│ ├── docker/ # Dockerfiles e configs por serviço
+│ ├── proxmox/ # Templates de provisionamento de VMs
+│ ├── backup/ # Scripts de backup/restore Postgres
+│ └── scripts/ # Cron jobs, partições, etc.
+│
+├── docs/ # Documentação detalhada
+│ ├── architecture/
+│ ├── runbooks/
+│ └── api/
+│
+├── docker-compose.yml # Ambiente de desenvolvimento
+├── docker-compose.prod.yml # Overrides para produção (Proxmox)
+└── Makefile # Atalhos de comando
+
+---
+
+## Licença
+
+Uso interno. Versão comercial planejada em fork separado.
+
+---
