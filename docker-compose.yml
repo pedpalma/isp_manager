@@ -125,7 +125,10 @@ services:
 
   # WORKER Celery
   worker:
-    # Reutiliza a MESMA imagem da api.
+    build:
+      context: .
+      dockerfile: infra/docker/backend/Dockerfile
+      target: dev
     image: isp_manager_backend:dev
     container_name: isp_manager_worker
     restart: unless-stopped

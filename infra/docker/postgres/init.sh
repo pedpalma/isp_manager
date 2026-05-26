@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Responsabilidades:
 #   1. Criar role isp_migrator (dono do schema, usado pelo Alembic).
 #   2. Criar role isp_app (runtime da aplicação, permissões mínimas).

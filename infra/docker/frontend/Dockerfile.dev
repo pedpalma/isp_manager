@@ -19,13 +19,6 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY frontend/package.jso[n] frontend/package-lock.jso[n] /app/
-RUN if [ -f /app/package.json ]; then \
-        npm ci || npm install; \
-    else \
-        echo "[frontend dev] package.json ainda não existe (esperado até Marco 7)."; \
-    fi
-
 # Encaminhamento correto de SIGTERM (graceful shutdown do next dev).
 ENTRYPOINT ["/usr/bin/tini", "--"]
 

@@ -1,0 +1,81 @@
+# Default: detecção automática para arquivos de texto.
+* text=auto
+
+# Scripts shell 
+*.sh         text eol=lf
+*.bash       text eol=lf
+
+
+# Backend Python e configs relacionadas
+*.py         text eol=lf
+*.pyi        text eol=lf
+*.toml       text eol=lf
+*.cfg        text eol=lf
+*.ini        text eol=lf
+*.in         text eol=lf
+requirements*.txt text eol=lf
+.python-version   text eol=lf
+
+
+# Frontend TS/JS
+*.ts         text eol=lf
+*.tsx        text eol=lf
+*.js         text eol=lf
+*.jsx        text eol=lf
+*.mjs        text eol=lf
+*.cjs        text eol=lf
+*.json       text eol=lf
+*.json5      text eol=lf
+*.css        text eol=lf
+*.scss       text eol=lf
+*.html       text eol=lf
+
+
+# Infra (Docker, compose, nginx, alembic, SQL)
+Dockerfile          text eol=lf
+Dockerfile.*        text eol=lf
+*.dockerfile        text eol=lf
+docker-compose*.yml text eol=lf
+*.yml               text eol=lf
+*.yaml              text eol=lf
+*.conf              text eol=lf
+*.sql               text eol=lf
+*.mako              text eol=lf
+Makefile            text eol=lf
+
+
+# Documentação e config geral
+*.md         text eol=lf
+*.txt        text eol=lf
+*.env        text eol=lf
+.env.*       text eol=lf
+.gitignore   text eol=lf
+.gitattributes text eol=lf
+.editorconfig  text eol=lf
+.dockerignore  text eol=lf
+
+
+# Binários — Git não tenta diff/normalizar
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.ico        binary
+*.webp       binary
+*.svg        text eol=lf
+*.pdf        binary
+*.zip        binary
+*.tar        binary
+*.tar.gz     binary
+*.tgz        binary
+*.gz         binary
+*.bz2        binary
+*.xz         binary
+*.woff       binary
+*.woff2      binary
+*.ttf        binary
+*.otf        binary
+*.eot        binary
+*.db         binary
+*.sqlite     binary
+*.sqlite3    binary
