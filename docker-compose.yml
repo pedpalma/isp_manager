@@ -1,1 +1,213 @@
-# Dev
+# Dev: ambiente de DESENVOLVIMENTO do ISP Manager.
+
+# Cinco serviços:
+#   postgres: Postgres 17, com init.sh criando roles e database
+#   redis: broker e backend de resultado do Celery
+#   api: FastAPI
+#   worker: Celery worker
+#   frontend: Next.js dev server
+
+name: isp_manager
+
+services:
+  # POSTGRES
+  postgres:
+    image: postgres:17-bookworm
+    container_name: isp_manager_postgres
+    restart: unless-stopped
+
+    # Variáveis do entrypoint do Postgres.
+    # POSTGRES_USER/POSTGRES_PASSWORD são as credenciais do SUPERUSUÁRIO, usado pelo init.sh para criar isp_app e isp_migrator.
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-isp_manager}
+      # Variáveis customizadas usadas pelo init.sh
+      ISP_APP_DB_USER: ${ISP_APP_DB_USER:-isp_app}
+      ISP_APP_DB_PASSWORD: ${ISP_APP_DB_PASSWORD}
+      ISP_MIGRATOR_DB_USER: ${ISP_MIGRATOR_DB_USER:-isp_migrator}
+      ISP_MIGRATOR_DB_PASSWORD: ${ISP_MIGRATOR_DB_PASSWORD}
+      TZ: UTC
+      PGTZ: UTC
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      # Volume nomeado para persistir dados entre restarts. Para resetar tudo: docker compose down -v
+      - pg_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+
+    # Healthcheck: verifica se o Postgres aceita conexões.
+    # interval/timeout/retries calibrados para subida rápida em dev.
+    # start_period: dá folga inicial enquanto o init.sh roda (pode levar 5-10s).
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${ISP_MIGRATOR_DB_USER:-isp_migrator} -d ${POSTGRES_DB:-isp_manager}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+    networks:
+      - isp_net
+
+  # REDIS broker do Celery + cache leve
+  redis:
+    image: redis:7-bookworm
+    container_name: isp_manager_redis
+    restart: unless-stopped
+
+    # appendonly yes: persistência via AOF.
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory-policy noeviction
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+    networks:
+      - isp_net
+
+  # API FastAPI
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/backend/Dockerfile
+      target: dev
+    image: isp_manager_backend:dev
+    container_name: isp_manager_api
+    restart: unless-stopped
+
+    # Carrega TODAS as variáveis do .env diretamente no ambiente do container.
+    env_file:
+      - .env
+
+    environment:
+      # Sobrescreve hosts para nomes da rede interna do compose.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHONPATH: /app
+
+    command: ["tail", "-f", "/dev/null"]
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      # Bind mount do código backend (hot reload).
+      - ./backend:/app
+      - backend_venv:/app/.venv
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    networks:
+      - isp_net
+
+  # WORKER Celery
+  worker:
+    # Reutiliza a MESMA imagem da api.
+    image: isp_manager_backend:dev
+    container_name: isp_manager_worker
+    restart: unless-stopped
+
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PYTHONPATH: /app
+
+    command: ["tail", "-f", "/dev/null"]
+
+    volumes:
+      - ./backend:/app
+      - backend_venv:/app/.venv
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # depends_on da api garante que a build da imagem aconteceu primeiro.
+      api:
+        condition: service_started
+
+    networks:
+      - isp_net
+
+  # FRONTEND Next.js
+  frontend:
+    build:
+      context: .
+      dockerfile: infra/docker/frontend/Dockerfile.dev
+    image: isp_manager_frontend:dev
+    container_name: isp_manager_frontend
+    restart: unless-stopped
+
+    environment:
+      # URL pública da API consumida pelo navegador.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # Hot reload confiável em bind mount no Linux.
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+
+    command: ["tail", "-f", "/dev/null"]
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+      - ./frontend:/app
+      # Instalação acontece dentro do container, não no host. Sem isto, o bind mount cobriria node_modules vazio do host.
+      - frontend_node_modules:/app/node_modules
+      # .next também precisa ficar dentro do container para evitar lixo no host.
+      - frontend_next_cache:/app/.next
+
+    depends_on:
+      api:
+        condition: service_started
+
+    networks:
+      - isp_net
+
+# REDE
+networks:
+  isp_net:
+    name: isp_manager_net
+    driver: bridge
+
+# VOLUMES NOMEADOS
+
+volumes:
+  pg_data:
+    name: isp_manager_pg_data
+  redis_data:
+    name: isp_manager_redis_data
+  backend_venv:
+    name: isp_manager_backend_venv
+  frontend_node_modules:
+    name: isp_manager_frontend_node_modules
+  frontend_next_cache:
+    name: isp_manager_frontend_next_cache
