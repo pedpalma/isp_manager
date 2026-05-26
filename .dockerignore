@@ -1,0 +1,58 @@
+# Controle de versão
+.git
+.gitignore
+.gitattributes
+
+# Documentação e meta arquivos do repo
+README.md
+docs/
+*.md
+
+# Configuração de IDEs e ferramentas locais
+.editorconfig
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Segredos e arquivos de ambiente locais, .env NUNCA entra na imagem.
+.env
+.env.*
+!.env.example
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+**/htmlcov
+**/.venv
+**/venv
+**/*.egg-info
+**/dist
+**/build
+
+# Node
+**/node_modules
+**/.next
+**/out
+**/coverage
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+
+# Docker / infra
+docker-compose*.yml
+.dockerignore
+
+# Logs e dumps locais
+*.log
+*.dump
+*.sql.gz
+
+# Saídas de teste e relatórios
+test-results/
+playwright-report/
