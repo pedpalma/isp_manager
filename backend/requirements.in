@@ -1,0 +1,22 @@
+# Web framework
+fastapi[standard] ~= 0.136.0
+uvicorn[standard] ~= 0.30
+
+# Validação e configuração
+pydantic ~= 2.13
+pydantic-settings ~= 2.14
+
+# Banco de dados
+sqlalchemy[asyncio] ~= 2.0.50
+asyncpg ~= 0.30
+alembic ~= 1.13
+
+# Segurança
+pyjwt ~= 2.9
+argon2-cffi ~= 23.1
+
+# Observabilidade
+structlog ~= 24.4
+
+# Dev tooling (instalado também em prod por enquanto; mover para -dev.in depois)
+pip-tools ~= 7.4
