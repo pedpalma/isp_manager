@@ -1,1 +1,0 @@
-# DTOs comuns multi-vendor
