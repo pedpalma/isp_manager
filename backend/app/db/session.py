@@ -1,4 +1,4 @@
-from _collections_abc import AsyncIterator
+from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -7,21 +7,21 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import get_settings
+from app.core.config import settings
 
-# Engine e sessionmaker globais do módulo
+# Engine e sessionmaker globais do módulo, inicializados no startup.
 _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
 def init_engine() -> AsyncEngine:
-    # Cria o engine async e o sessionmaker
+
+    # Cria o engine async e o sessionmaker.
+
     global _engine, _sessionmaker
 
     if _engine is not None:
         return _engine
-
-    settings = get_settings()
 
     _engine = create_async_engine(
         settings.database.build_app_url(),
@@ -49,7 +49,7 @@ def init_engine() -> AsyncEngine:
 
 
 async def dispose_engine() -> None:
-    # Fecha a engine
+    # Fecha o engine e drena o pool. Chamado no shutdown do lifespan
     global _engine, _sessionmaker
 
     if _engine is not None:
@@ -59,18 +59,22 @@ async def dispose_engine() -> None:
 
 
 def get_engine() -> AsyncEngine:
-    # Retorna a engine
+    # Retorna o engine. Erro se chamado antes de init_engine
     if _engine is None:
-        raise RuntimeError("Engine did not started, call init_engine() on startup.")
+        raise RuntimeError("Engine não inicializado. init_engine() deve ser chamada no startup.")
     return _engine
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
-    # FastAPI usa para injetar AssyncSession por request
-    if _sessionmaker is None:
-        raise RuntimeError("Sessionmaker did not started, call init_engine() on startup.")
 
-    async with _sessionmaker as session:
+    # Dependency da FastAPI para injetar uma AsyncSession por request.
+
+    if _sessionmaker is None:
+        raise RuntimeError(
+            "Sessionmaker não inicializado. init_engine() deve ser chamada no startup."
+        )
+
+    async with _sessionmaker() as session:
         try:
             yield session
         except Exception:

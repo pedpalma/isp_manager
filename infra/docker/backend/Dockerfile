@@ -1,4 +1,4 @@
-# Stage 1: base dependências de sistema + Python deps já instaladas.
+# Stage 1: base
 # Tanto dev quanto prod herdam daqui.
 FROM python:3.12-slim-bookworm AS base
 
@@ -27,6 +27,7 @@ RUN pip install --upgrade pip pip-tools
 COPY infra/scripts/wait-for-db.sh /usr/local/bin/wait-for-db
 RUN chmod +x /usr/local/bin/wait-for-db
 
+# DEPENDÊNCIAS PYTHON
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
@@ -61,3 +62,7 @@ RUN groupadd --system --gid 1000 app \
 COPY --chown=app:app backend/ /app/
 
 USER app
+
+# CMD final é definido pelo orquestrador (compose/Kubernetes) por serviço.
+# Exemplo para api: uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Exemplo para worker: celery -A app.celery_app worker --loglevel=INFO

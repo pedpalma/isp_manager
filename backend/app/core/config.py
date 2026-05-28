@@ -1,8 +1,14 @@
+# Configurações da aplicação.
+
 from typing import Literal
 
 from pydantic import Field, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Configuração comum a todas as classes Settings:
+# - Lê do arquivo .env na raiz do projeto.
+# - Variáveis de ambiente do SO têm prioridade sobre .env (padrão pydantic-settings).
+# - Ignora variáveis extras no .env (não falha se houver lixo).
 _COMMON_CONFIG = SettingsConfigDict(
     env_file=".env",
     env_file_encoding="utf-8",
@@ -12,13 +18,13 @@ _COMMON_CONFIG = SettingsConfigDict(
 
 
 class AppSettings(BaseSettings):
-    # Configurações gerais do app
+    """Configurações gerais da aplicação."""
 
     model_config = _COMMON_CONFIG
 
     app_name: str = Field(default="isp_manager", alias="APP_NAME")
-    app_env: str = Field(default="0.1.0", alias="APP_VERSION")
-    app_debug: Literal["development", "staging", "production"] = Field(
+    app_version: str = Field(default="0.1.0", alias="APP_VERSION")
+    app_env: Literal["development", "staging", "production"] = Field(
         default="development", alias="APP_ENV"
     )
     tz: str = Field(default="America/Sao_Paulo", alias="TZ")
@@ -32,36 +38,49 @@ class AppSettings(BaseSettings):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
     def expose_internal_errors(self) -> bool:
+        """Define se erros 500 devem expor stack trace. NUNCA em prod."""
         return self.app_env == "development"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def cors_origins_list(self) -> list[str]:
-        # CORS_ORIGINS é string separada por vírgula; expõe como lista.
+        """CORS_ORIGINS é string separada por vírgula; expõe como lista."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 class DatabaseSettings(BaseSettings):
-    # isp_app: runtime do app (SELECT, UPDATE, INSERT, DELETE)
-    # isp_migrator: Alembic (CREATE, ALTER, DROP)
+    """Configurações de banco de dados.
+
+    Mantém DUAS URLs porque o sistema tem dois roles Postgres:
+    - isp_app: runtime da aplicação (DML)
+    - isp_migrator: apenas Alembic (DDL)
+
+    Princípio de segurança: a app nunca usa o role com poder de DDL. Se for
+    comprometida via SQL injection, o atacante não consegue alterar schema.
+    """
 
     model_config = _COMMON_CONFIG
 
-    #  Conexão
+    # Conexão (compartilhada entre os dois roles).
     postgres_host: str = Field(default="postgres", alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
     postgres_db: str = Field(default="isp_manager", alias="POSTGRES_DB")
 
-    # Role de runtime
+    # Role da aplicação.
     isp_app_db_user: str = Field(default="isp_app", alias="ISP_APP_DB_USER")
     isp_app_db_password: SecretStr = Field(alias="ISP_APP_DB_PASSWORD")
 
-    # Role Alembic
+    # Role do Alembic (usado fora do hot path da API; só em migrations).
     isp_migrator_db_user: str = Field(default="isp_migrator", alias="ISP_MIGRATOR_DB_USER")
     isp_migrator_db_password: SecretStr = Field(alias="ISP_MIGRATOR_DB_PASSWORD")
 
-    # Pool de conexões
+    # Pool de conexões da aplicação.
     pool_size: int = Field(default=10, alias="DB_POOL_SIZE")
     max_overflow: int = Field(default=20, alias="DB_MAX_OVERFLOW")
     pool_timeout: int = Field(default=30, alias="DB_POOL_TIMEOUT")
@@ -69,11 +88,11 @@ class DatabaseSettings(BaseSettings):
 
     statement_timeout_ms: int = Field(default=30_000, alias="DB_STATEMENT_TIMEOUT_MS")
 
-    # Util apenas para dev, nunca levar para prod
+    # Em dev, eco de SQL no log ajuda. Em prod, NUNCA.
     echo_sql: bool = Field(default=False, alias="DB_ECHO_SQL")
 
     def build_app_url(self) -> str:
-        # Async para uso normal
+        """URL async para o role da aplicação (uso normal)."""
         password = self.isp_app_db_password.get_secret_value()
         return (
             f"postgresql+asyncpg://{self.isp_app_db_user}:{password}"
@@ -81,7 +100,7 @@ class DatabaseSettings(BaseSettings):
         )
 
     def build_migrator_url(self) -> str:
-        # URL sync para o Alembic
+        """URL sync para Alembic (Alembic não é async)."""
         password = self.isp_migrator_db_password.get_secret_value()
         return (
             f"postgresql+psycopg://{self.isp_migrator_db_user}:{password}"
@@ -90,7 +109,7 @@ class DatabaseSettings(BaseSettings):
 
 
 class RedisSettings(BaseSettings):
-    # Configurações do Redis
+    """Configurações do Redis."""
 
     model_config = _COMMON_CONFIG
 
@@ -104,11 +123,11 @@ class RedisSettings(BaseSettings):
 
 
 class SecuritySettings(BaseSettings):
-    # Configurações de segurança e autenticação
+    """Configurações de autenticação e criptografia."""
 
     model_config = _COMMON_CONFIG
 
-    # Segredo JWT
+    # Segredo do JWT. Mínimo 32 chars em produção.
     api_secret_key: SecretStr = Field(alias="API_SECRET_KEY")
     jwt_algorithm: Literal["HS256", "HS512", "RS256"] = Field(
         default="HS256", alias="JWT_ALGORITHM"
@@ -118,7 +137,7 @@ class SecuritySettings(BaseSettings):
 
 
 class LoggingSettings(BaseSettings):
-    # Configurações de Logs
+    """Configurações de logging."""
 
     model_config = _COMMON_CONFIG
 
@@ -130,10 +149,12 @@ class LoggingSettings(BaseSettings):
 
 class Settings(BaseSettings):
     """
-    Cada módulo importa só o que precisa via:
-    from app.core.config import get_settings
-    settings = get_settings()
-    db_url = settings.database.build_app_url()
+    Settings raiz. Agrega todos os domínios.
+
+    Uso:
+        from app.core.config import settings
+        url = settings.database.build_app_url()
+        debug = settings.app.expose_internal_errors
     """
 
     model_config = _COMMON_CONFIG
@@ -145,4 +166,6 @@ class Settings(BaseSettings):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
 
 
+# Instância única exposta no módulo. Instanciada no import: se faltar variável
+# obrigatória no .env, a aplicação falha rápido no startup (fail-fast).
 settings = Settings()

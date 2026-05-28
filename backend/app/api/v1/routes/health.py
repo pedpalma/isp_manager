@@ -1,3 +1,5 @@
+# Endpoints de saúde.
+
 import logging
 from typing import Literal
 
@@ -14,13 +16,13 @@ router = APIRouter(tags=["health"])
 
 
 class HealthResponse(BaseModel):
-    # Liveness response
+    """Liveness response."""
 
     status: Literal["ok"] = "ok"
 
 
 class HealthDBResponse(BaseModel):
-    # Readiness response (banco
+    """Readiness response (banco)."""
 
     status: Literal["ok"]
     database: Literal["reachable"] = "reachable"
@@ -30,6 +32,7 @@ class HealthDBResponse(BaseModel):
     "/health",
     response_model=HealthResponse,
     summary="Liveness probe",
+    description="Retorna 200 enquanto o processo está vivo. Não toca em dependências.",
 )
 async def health() -> HealthResponse:
     return HealthResponse()
@@ -39,6 +42,10 @@ async def health() -> HealthResponse:
     "/health/db",
     response_model=HealthDBResponse,
     summary="Readiness probe (banco de dados)",
+    description=(
+        "Executa SELECT 1 no Postgres. Retorna 200 se o banco responde, "
+        "503 caso contrário. Usado por load balancers para decidir roteamento."
+    ),
     responses={
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Banco indisponível.",
