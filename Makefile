@@ -1,4 +1,4 @@
-# Makefile — isp_manager
+# Makefile isp_manager
 
 # Shell explícito.
 SHELL := /bin/bash
@@ -32,7 +32,7 @@ COLOR_CYAN   := \033[36m
 .PHONY: help
 help: ## Lista todos os comandos disponíveis
 	@echo ""
-	@echo "$(COLOR_BOLD)isp_manager — comandos disponíveis$(COLOR_RESET)"
+	@echo "$(COLOR_BOLD)isp_manager comandos disponíveis$(COLOR_RESET)"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(COLOR_CYAN)%-22s$(COLOR_RESET) %s\n", $$1, $$2}' | \
@@ -71,7 +71,7 @@ env-init: ## Cria .env a partir do .env.example (se não existir)
 		echo "$(COLOR_GREEN)✓ Criado $(ENV_FILE)$(COLOR_RESET)"; \
 		echo "$(COLOR_YELLOW)⚠ Edite $(ENV_FILE) e ajuste senhas antes de subir o ambiente.$(COLOR_RESET)"; \
 	else \
-		echo "$(COLOR_YELLOW)⚠ $(ENV_FILE) já existe — não sobrescrito.$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)⚠ $(ENV_FILE) já existe não sobrescrito.$(COLOR_RESET)"; \
 	fi
 
 .PHONY: secret
@@ -175,12 +175,12 @@ shell-frontend: ## Bash dentro do container do frontend
 	@$(COMPOSE) exec $(SERVICE_FRONTEND) sh
 
 .PHONY: shell-db
-shell-db: ## Console psql conectado ao banco
-	@$(COMPOSE) exec $(SERVICE_DB) psql -U $${POSTGRES_APP_USER:-isp_app} -d $${POSTGRES_DB:-isp_manager}
+shell-db: ## Console psql conectado ao banco como role da aplicação
+	@$(COMPOSE) exec $(SERVICE_DB) psql -U $${ISP_APP_DB_USER:-isp_app} -d $${POSTGRES_DB:-isp_manager}
 
 .PHONY: shell-db-root
 shell-db-root: ## Console psql como superuser (use com cuidado)
-	@$(COMPOSE) exec $(SERVICE_DB) psql -U $${POSTGRES_ROOT_USER:-postgres} -d $${POSTGRES_DB:-isp_manager}
+	@$(COMPOSE) exec $(SERVICE_DB) psql -U $${POSTGRES_SUPERUSER:-postgres} -d $${POSTGRES_DB:-isp_manager}
 
 .PHONY: shell-redis
 shell-redis: ## redis-cli conectado ao Redis
@@ -189,6 +189,17 @@ shell-redis: ## redis-cli conectado ao Redis
 .PHONY: python
 python: ## Abre REPL Python dentro da API (com app carregada)
 	@$(COMPOSE) exec $(SERVICE_API) python
+
+
+# HEALTHCHECK
+
+.PHONY: health
+health: ## Testa endpoints de saúde da API
+	@echo "$(COLOR_BOLD)Liveness:$(COLOR_RESET)"
+	@curl -fsS http://localhost:8000/health | python3 -m json.tool || echo "$(COLOR_RED)API down$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)Readiness (DB):$(COLOR_RESET)"
+	@curl -fsS http://localhost:8000/health/db | python3 -m json.tool || echo "$(COLOR_RED)DB unavailable$(COLOR_RESET)"
 
 
 # MIGRATIONS (Alembic)
@@ -224,13 +235,13 @@ migration-status: ## Mostra revisão atual e migrations pendentes
 	@$(COMPOSE) exec $(SERVICE_API) alembic history --indicate-current
 
 
-# BANCO DE DADOS — utilitários
+# BANCO DE DADOS utilitários
 
 .PHONY: db-dump
 db-dump: ## Faz dump do banco para arquivo (./backups/dump_TIMESTAMP.sql.gz)
 	@mkdir -p backups
 	@TIMESTAMP=$$(date +%Y%m%d_%H%M%S); \
-	$(COMPOSE) exec -T $(SERVICE_DB) pg_dump -U $${POSTGRES_ROOT_USER:-postgres} -d $${POSTGRES_DB:-isp_manager} | gzip > backups/dump_$$TIMESTAMP.sql.gz; \
+	$(COMPOSE) exec -T $(SERVICE_DB) pg_dump -U $${POSTGRES_SUPERUSER:-postgres} -d $${POSTGRES_DB:-isp_manager} | gzip > backups/dump_$$TIMESTAMP.sql.gz; \
 	echo "$(COLOR_GREEN)✓ Dump salvo em backups/dump_$$TIMESTAMP.sql.gz$(COLOR_RESET)"
 
 .PHONY: db-reset
@@ -279,13 +290,13 @@ test-cov: ## Roda testes com relatório de cobertura
 
 .PHONY: lint
 lint: ## Roda linters (ruff + mypy) no backend
-	@$(COMPOSE) exec $(SERVICE_API) ruff check app tests
+	@$(COMPOSE) exec $(SERVICE_API) ruff check app
 	@$(COMPOSE) exec $(SERVICE_API) mypy app
 
 .PHONY: format
 format: ## Formata código (ruff format) no backend
-	@$(COMPOSE) exec $(SERVICE_API) ruff format app tests
-	@$(COMPOSE) exec $(SERVICE_API) ruff check --fix app tests
+	@$(COMPOSE) exec $(SERVICE_API) ruff format app
+	@$(COMPOSE) exec $(SERVICE_API) ruff check --fix app
 
 .PHONY: lint-frontend
 lint-frontend: ## Roda lint no frontend
@@ -303,7 +314,7 @@ deps-upgrade: ## Atualiza todas as dependências para versões mais recentes
 	@$(COMPOSE) exec $(SERVICE_API) pip-compile --upgrade requirements.in --output-file requirements.txt
 
 .PHONY: deps-sync
-deps-sync: ## Sincroniza venv com requirements.txt (dentro do container)
+deps-sync: ## Sincroniza site-packages com requirements.txt (dentro do container)
 	@$(COMPOSE) exec $(SERVICE_API) pip-sync requirements.txt
 
 
@@ -358,4 +369,4 @@ info: ## Mostra informações úteis do ambiente
 
 .PHONY: version
 version: ## Mostra versão da aplicação
-	@$(COMPOSE) exec $(SERVICE_API) python -c "from app.core.config import settings; print(settings.app_version)" 2>/dev/null || echo "API não está rodando"
+	@$(COMPOSE) exec $(SERVICE_API) python -c "from app.core.config import settings; print(settings.app.app_version)" 2>/dev/null || echo "API não está rodando"

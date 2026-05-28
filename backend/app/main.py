@@ -24,10 +24,13 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=settings.app.app_name,
-        version="0.1.0",
+        version=settings.app.app_version,
         lifespan=lifespan,
         # mudar para false quando for para prod
         debug=settings.app.expose_internal_errors(),
+        docs_url="/docs" if settings.app.enable_api_docs else None,
+        redoc_url="/redoc" if settings.app.enable_api_docs else None,
+        openapi_url="/openapi.json" if settings.app.enable_api_docs else None,
     )
 
     app.include_router(health.router)

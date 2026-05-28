@@ -1,6 +1,5 @@
-# Backend Dockerfile
-
-# Stage 1: base
+# Stage 1: base dependências de sistema + Python deps já instaladas.
+# Tanto dev quanto prod herdam daqui.
 FROM python:3.12-slim-bookworm AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -19,41 +18,46 @@ RUN apt-get update \
         tini \
     && rm -rf /var/lib/apt/lists/*
 
-# Diretório de trabalho da aplicação.
 WORKDIR /app
 
-# Atualiza pip e instala pip-tools 
+# pip-tools fica disponível tanto em dev (recompile) quanto em prod (auditoria).
 RUN pip install --upgrade pip pip-tools
 
+# Wait-for-db script utilitário (sem chmod já aplicado no git).
 COPY infra/scripts/wait-for-db.sh /usr/local/bin/wait-for-db
 RUN chmod +x /usr/local/bin/wait-for-db
 
-# Garante encaminhamento correto de sinais (graceful shutdown).
+COPY backend/requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
+
+# tini como PID 1 garante encaminhamento de sinais (graceful shutdown).
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
 
-# Stage 2: dev
+# Stage 2: dev adiciona ferramentas de desenvolvimento.
+# Código vem via bind mount no compose; nada de COPY de app/ aqui.
 FROM base AS dev
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         postgresql-client \
+        git \
+        vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
+# Em dev rodamos como root para facilitar instalação ad-hoc de pacotes,
+# ajustes em arquivos via bind mount, etc. Em prod usamos user não-root.
 USER root
 
+
+# Stage 3: prod imagem enxuta para deploy.
 FROM base AS prod
 
+# User não-root para reduzir blast radius em caso de RCE.
 RUN groupadd --system --gid 1000 app \
     && useradd  --system --uid 1000 --gid app --home-dir /app --shell /usr/sbin/nologin app
 
-# Instala dependências congeladas.
-COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install -r /tmp/requirements.txt
-
-# Copia o código da aplicação.
+# Copia o código da aplicação (sem bind mount em prod).
 COPY --chown=app:app backend/ /app/
 
 USER app
-
-# CMD definido pelo orquestrador (compose / Kubernetes / systemd) por serviço.

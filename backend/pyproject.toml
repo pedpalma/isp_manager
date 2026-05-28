@@ -30,6 +30,7 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
@@ -39,6 +40,7 @@ exclude = ["alembic/versions"]
 [[tool.mypy.overrides]]
 module = ["alembic.*"]
 ignore_missing_imports = true
+
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -17,6 +17,7 @@ _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 def init_engine() -> AsyncEngine:
     # Cria o engine async e o sessionmaker
     global _engine, _sessionmaker
+
     if _engine is not None:
         return _engine
 
@@ -24,11 +25,18 @@ def init_engine() -> AsyncEngine:
 
     _engine = create_async_engine(
         settings.database.build_app_url(),
-        echo=settings.database.db_echo_sql,
-        pool_size=settings.database.db_pool_size,
-        max_overflow=settings.database.db_max_overflow,
-        pool_timeout=settings.database.db_pool_timeout_seconds,
+        echo=settings.database.echo_sql,
+        pool_size=settings.database.pool_size,
+        max_overflow=settings.database.max_overflow,
+        pool_timeout=settings.database.pool_timeout,
+        pool_recycle=settings.database.pool_recycle,
         pool_pre_ping=True,
+        connect_args={
+            "server_settings": {
+                "statement_timeout": str(settings.database.statement_timeout_ms),
+                "application_name": settings.app.app_name,
+            },
+        },
     )
 
     _sessionmaker = async_sessionmaker(
