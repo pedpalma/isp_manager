@@ -123,6 +123,22 @@ class RedisSettings(BaseSettings):
     broker_db: int = Field(default=1, alias="REDIS_BROKER_DB")
     result_db: int = Field(default=2, alias="REDIS_RESULT_DB")
 
+    def _build_url(self, db: int) -> str:
+        # Monta redis://[:senha@]host:porta/db
+        if self.redis_password is not None:
+            auth = f":{quote(self.redis_password.get_secret_value(), safe='')}@"
+        else:
+            auth = ""
+        return f"redis://{auth}{self.redis_host}:{self.redis_port}:{db}"
+
+    def build_broker_url(self) -> str:
+        # URL do Broker Celery (fila de tarefas)
+        return self._build_url(self.broker_db)
+
+    def build_result_backend_url(self) -> str:
+        # URL do Backend de resultados Celery
+        return self._build_url(self.result_db)
+
 
 class SecuritySettings(BaseSettings):
     """Configurações de autenticação e criptografia."""
