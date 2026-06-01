@@ -1,7 +1,7 @@
 # Makefile isp_manager
 
 # Shell explícito.
-SHELL := /bin/bash
+SHELL := /bin/zsh
 
 COMPOSE := docker compose
 
