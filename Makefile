@@ -48,7 +48,7 @@ setup: ## Configuração inicial do projeto (primeira vez)
 	@$(MAKE) env-init
 	@$(MAKE) build
 	@echo ""
-	@echo "$(COLOR_GREEN)✓ Setup concluído!$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN) ✓ Setup concluído!$(COLOR_RESET)"
 	@echo ""
 	@echo "Próximos passos:"
 	@echo "  1. Revise o arquivo $(COLOR_YELLOW).env$(COLOR_RESET) e ajuste senhas"
@@ -59,19 +59,19 @@ setup: ## Configuração inicial do projeto (primeira vez)
 .PHONY: check-deps
 check-deps: ## Verifica se dependências do host estão instaladas
 	@echo "Verificando dependências..."
-	@command -v docker >/dev/null 2>&1 || { echo "$(COLOR_RED)✗ docker não encontrado$(COLOR_RESET)"; exit 1; }
-	@docker compose version >/dev/null 2>&1 || { echo "$(COLOR_RED)✗ docker compose v2 não encontrado$(COLOR_RESET)"; exit 1; }
-	@command -v git >/dev/null 2>&1 || { echo "$(COLOR_RED)✗ git não encontrado$(COLOR_RESET)"; exit 1; }
-	@echo "$(COLOR_GREEN)✓ Dependências OK$(COLOR_RESET)"
+	@command -v docker >/dev/null 2>&1 || { echo "$(COLOR_RED) ✗ docker não encontrado$(COLOR_RESET)"; exit 1; }
+	@docker compose version >/dev/null 2>&1 || { echo "$(COLOR_RED) ✗ docker compose v2 não encontrado$(COLOR_RESET)"; exit 1; }
+	@command -v git >/dev/null 2>&1 || { echo "$(COLOR_RED) ✗ git não encontrado$(COLOR_RESET)"; exit 1; }
+	@echo "$(COLOR_GREEN) ✓ Dependências OK$(COLOR_RESET)"
 
 .PHONY: env-init
 env-init: ## Cria .env a partir do .env.example (se não existir)
 	@if [ ! -f $(ENV_FILE) ]; then \
 		cp $(ENV_EXAMPLE) $(ENV_FILE); \
-		echo "$(COLOR_GREEN)✓ Criado $(ENV_FILE)$(COLOR_RESET)"; \
-		echo "$(COLOR_YELLOW)⚠ Edite $(ENV_FILE) e ajuste senhas antes de subir o ambiente.$(COLOR_RESET)"; \
+		echo "$(COLOR_GREEN) ✓ Criado $(ENV_FILE)$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW) ⚠ Edite $(ENV_FILE) e ajuste senhas antes de subir o ambiente.$(COLOR_RESET)"; \
 	else \
-		echo "$(COLOR_YELLOW)⚠ $(ENV_FILE) já existe não sobrescrito.$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW) ⚠ $(ENV_FILE) já existe não sobrescrito.$(COLOR_RESET)"; \
 	fi
 
 .PHONY: secret
@@ -85,7 +85,7 @@ secret: ## Gera uma chave aleatória segura (use para API_SECRET_KEY)
 up: ## Sobe todos os serviços em background
 	@$(COMPOSE) up -d
 	@echo ""
-	@echo "$(COLOR_GREEN)✓ Serviços iniciados$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN) ✓ Serviços iniciados$(COLOR_RESET)"
 	@echo "  API:      http://localhost:8000"
 	@echo "  Docs:     http://localhost:8000/docs"
 	@echo "  Frontend: http://localhost:3000"
@@ -215,7 +215,7 @@ migrate-down: ## Reverte a última migration (CUIDADO em produção)
 .PHONY: migration
 migration: ## Cria nova migration. Uso: make migration m="descrição"
 	@if [ -z "$(m)" ]; then \
-		echo "$(COLOR_RED)✗ Faltou a mensagem. Use: make migration m=\"descrição\"$(COLOR_RESET)"; \
+		echo "$(COLOR_RED) ✗ Faltou a mensagem. Use: make migration m=\"descrição\"$(COLOR_RESET)"; \
 		exit 1; \
 	fi
 	@$(COMPOSE) exec $(SERVICE_API) alembic revision --autogenerate -m "$(m)"
@@ -223,7 +223,7 @@ migration: ## Cria nova migration. Uso: make migration m="descrição"
 .PHONY: migration-empty
 migration-empty: ## Cria migration vazia (para SQL raw). Uso: make migration-empty m="descrição"
 	@if [ -z "$(m)" ]; then \
-		echo "$(COLOR_RED)✗ Faltou a mensagem. Use: make migration-empty m=\"descrição\"$(COLOR_RESET)"; \
+		echo "$(COLOR_RED) ✗ Faltou a mensagem. Use: make migration-empty m=\"descrição\"$(COLOR_RESET)"; \
 		exit 1; \
 	fi
 	@$(COMPOSE) exec $(SERVICE_API) alembic revision -m "$(m)"
@@ -242,11 +242,11 @@ db-dump: ## Faz dump do banco para arquivo (./backups/dump_TIMESTAMP.sql.gz)
 	@mkdir -p backups
 	@TIMESTAMP=$$(date +%Y%m%d_%H%M%S); \
 	$(COMPOSE) exec -T $(SERVICE_DB) pg_dump -U $${POSTGRES_SUPERUSER:-postgres} -d $${POSTGRES_DB:-isp_manager} | gzip > backups/dump_$$TIMESTAMP.sql.gz; \
-	echo "$(COLOR_GREEN)✓ Dump salvo em backups/dump_$$TIMESTAMP.sql.gz$(COLOR_RESET)"
+	echo "$(COLOR_GREEN) ✓ Dump salvo em backups/dump_$$TIMESTAMP.sql.gz$(COLOR_RESET)"
 
 .PHONY: db-reset
 db-reset: ## DESTRUTIVO: apaga e recria o banco vazio
-	@echo "$(COLOR_RED)⚠ Isso vai APAGAR todos os dados do banco.$(COLOR_RESET)"
+	@echo "$(COLOR_RED) ⚠ Isso vai APAGAR todos os dados do banco.$(COLOR_RESET)"
 	@read -p "Digite 'sim' para confirmar: " confirm; \
 	if [ "$$confirm" = "sim" ]; then \
 		$(COMPOSE) down -v; \
@@ -256,7 +256,7 @@ db-reset: ## DESTRUTIVO: apaga e recria o banco vazio
 		$(MAKE) up; \
 		sleep 3; \
 		$(MAKE) migrate; \
-		echo "$(COLOR_GREEN)✓ Banco resetado.$(COLOR_RESET)"; \
+		echo "$(COLOR_GREEN) ✓ Banco resetado.$(COLOR_RESET)"; \
 	else \
 		echo "Cancelado."; \
 	fi
@@ -337,11 +337,11 @@ clean: ## Para containers e remove volumes anônimos
 
 .PHONY: clean-all
 clean-all: ## DESTRUTIVO: para tudo, remove volumes nomeados e imagens
-	@echo "$(COLOR_RED)⚠ Isso vai apagar volumes (incluindo banco) e imagens.$(COLOR_RESET)"
+	@echo "$(COLOR_RED) ⚠ Isso vai apagar volumes (incluindo banco) e imagens.$(COLOR_RESET)"
 	@read -p "Digite 'sim' para confirmar: " confirm; \
 	if [ "$$confirm" = "sim" ]; then \
 		$(COMPOSE) down -v --remove-orphans --rmi local; \
-		echo "$(COLOR_GREEN)✓ Limpeza completa.$(COLOR_RESET)"; \
+		echo "$(COLOR_GREEN) ✓ Limpeza completa.$(COLOR_RESET)"; \
 	else \
 		echo "Cancelado."; \
 	fi
