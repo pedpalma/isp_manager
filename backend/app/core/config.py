@@ -101,6 +101,14 @@ class DatabaseSettings(BaseSettings):
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
+    def buid_app_sync_url(self) -> str:
+        # URL sincrona para o worker Celery
+        password = quote(self.isp_app_db_password.get_secret_value(), safe="")
+        return (
+            f"postgresql+psycopg://{self.isp_app_db_user}:{password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
     def build_migrator_url(self) -> str:
         # URL sync para Alembic (Alembic não é async).
         password = quote(self.isp_migrator_db_password.get_secret_value(), safe="")
