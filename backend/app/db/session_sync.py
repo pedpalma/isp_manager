@@ -20,7 +20,7 @@ def _ensure_factory() -> sessionmaker[Session]:
     global _engine, _SessionFactory
     if _SessionFactory is None:
         _engine = create_engine(
-            settings.database.buid_app_sync_url(),
+            settings.database.build_app_sync_url(),
             pool_pre_ping=True,
             pool_size=settings.database.pool_size,
             max_overflow=settings.database.max_overflow,
