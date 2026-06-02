@@ -156,15 +156,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       PYTHONPATH: /app
-
-    command: celery -A app.worker worker --loglevel=INFO
-    healthcheck:
-      test:
-        ["CMD-SHELL", "celery -A app.worker inspect ping -t 10 | grep -q pong"]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 30s
     volumes:
       - ./backend:/app
 
@@ -176,7 +167,17 @@ services:
       # Garante que a build da imagem aconteceu primeiro (api compartilha image).
       api:
         condition: service_started
-
+    command: celery -A app.worker:celery_app worker --loglevel=INFO
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A app.worker:celery_app inspect ping -t 10 | grep -q pong",
+        ]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
     networks:
       - isp_net
 

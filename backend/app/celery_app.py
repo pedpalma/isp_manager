@@ -1,4 +1,4 @@
-# Configuração do Worker Celery (Broker + Backend de resultados + opções)
+# Configuração da aplicação Celery (broker + backend de resultados + opções)
 from __future__ import annotations
 
 from celery import Celery
@@ -11,23 +11,26 @@ celery_app = Celery(
     backend=settings.redis.build_result_backend_url(),
     include=[
         "app.tasks.health",
-        # Aqui serão incluidas as tasks futuras
+        # módulos de tasks adicionais entram aqui
     ],
 )
 
 celery_app.conf.update(
-    # Serialização com JSON
+    # Define explicitamente o retry de conexão ao broker no startup.
+    broker_connection_retry_on_startup=True,
+    # Serialização: apenas JSON.
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-    # UTC
+    # UTC em todo lugar.
     timezone="UTC",
     enable_utc=True,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    # Um worker pega uma tarefa por vez.
     worker_prefetch_multiplier=1,
-    # Resultados expiram em 1h
+    # Resultados expiram em 1h.
     result_expires=3600,
-    # Marca a task como 'started' assim que o worker pega
+    # Marca a task como 'started' assim que o worker pega.
     task_track_started=True,
 )
