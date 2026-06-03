@@ -137,7 +137,7 @@ class RedisSettings(BaseSettings):
             auth = f":{quote(self.redis_password.get_secret_value(), safe='')}@"
         else:
             auth = ""
-        return f"redis://{auth}{self.redis_host}:{self.redis_port}:{db}"
+        return f"redis://{auth}{self.redis_host}:{self.redis_port}/{db}"
 
     def build_broker_url(self) -> str:
         # URL do Broker Celery (fila de tarefas)
