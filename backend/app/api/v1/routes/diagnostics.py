@@ -1,4 +1,5 @@
-# Rota de diagnóstico
+# Rota de diagnóstico.
+
 from __future__ import annotations
 
 from typing import Literal
@@ -29,9 +30,9 @@ class EnqueueResponse(BaseModel):
     ),
 )
 async def echo_task() -> EnqueueResponse:
-    # Leva o request_id do request atual
+    # Este log sai com o request_id do request atual (via contextvars).
     log.info("diagnostics.echo_task.enqueue")
-    # .delay() dispara before_task_publish, que injeta o request_id no header
+    # .delay() dispara before_task_publish, que injeta o request_id nos headers.
     async_result = ping.delay()
     log.info("diagnostics.echo_task.enqueued", task_id=async_result.id)
     return EnqueueResponse(task_id=async_result.id)

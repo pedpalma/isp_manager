@@ -1,4 +1,7 @@
-# Middleware de logging de acesso
+# Middleware de logging de acesso.
+
+# Loga uma linha estruturada por request com método, caminho, status e duração.
+
 from __future__ import annotations
 
 import time
@@ -21,28 +24,34 @@ class LoggingMiddleware:
 
         method = scope.get("method", "-")
         path = scope.get("path", "-")
-        status_code = 500
+        status_code = 500  # default pessimista; sobrescrito ao receber o start
         start = time.perf_counter()
 
         async def send_wrapper(message: Message) -> None:
             nonlocal status_code
-            if message["type"] == "http.response.status":
+            if message["type"] == "http.response.start":
                 status_code = message["status"]
             await send(message)
 
-            log.info("request.start", method=method, path=path)
-            try:
-                await self.app(scope, receive, send_wrapper)
-            except Exception:
-                duration_ms = round((time.perf_counter() - start) * 1000, 2)
-                log.exception("request.error", method=method, path=path, duration_ms=duration_ms)
-                raise
-            else:
-                duration_ms = round((time.perf_counter() - start) * 1000, 2)
-                log.exception(
-                    "request.finish",
-                    method=method,
-                    path=path,
-                    status_code=status_code,
-                    duration_ms=duration_ms,
-                )
+        log.info("request.start", method=method, path=path)
+        try:
+            await self.app(scope, receive, send_wrapper)
+        except Exception:
+            duration_ms = round((time.perf_counter() - start) * 1000, 2)
+            # exc_info=True para o structlog renderizar o traceback no log.
+            log.exception(
+                "request.error",
+                method=method,
+                path=path,
+                duration_ms=duration_ms,
+            )
+            raise
+        else:
+            duration_ms = round((time.perf_counter() - start) * 1000, 2)
+            log.info(
+                "request.finish",
+                method=method,
+                path=path,
+                status_code=status_code,
+                duration_ms=duration_ms,
+            )

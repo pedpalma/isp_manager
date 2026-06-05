@@ -1,12 +1,16 @@
-# Handlers globais para retorno em JSON padronizado
+# Handlers globais de exceção.
+
+# Em dev (settings.app.expose_internal_errors == True) o 500 expõe a mensagem
+# real; em prod, devolve texto genérico e o detalhe fica só no log.
+
 from __future__ import annotations
 
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.exceptions import ValidationException
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPExceptions
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.middleware.request_id import REQUEST_ID_HEADER
 from app.core.config import settings
@@ -21,7 +25,7 @@ def _error_body(
     code: str,
     message: str,
     details: Any | None = None,
-) -> dict[str:Any]:
+) -> dict[str, Any]:
     return {
         "error": {
             "code": code,
@@ -32,60 +36,56 @@ def _error_body(
     }
 
 
-def _response(status_code: int, body: dict[str:Any]) -> JSONResponse:
-    # Repete o request_id no header
+def _response(status_code: int, body: dict[str, Any]) -> JSONResponse:
+    # Repete o request_id no header também, por conveniência de quem consome.
     request_id = get_request_id()
     headers = {REQUEST_ID_HEADER: request_id} if request_id else None
     return JSONResponse(status_code=status_code, content=body, headers=headers)
 
 
 def register_error_handlers(app: FastAPI) -> None:
-    # Regista todos os handlers no app. Chama em create_app().
+    """Registra todos os handlers no app. Chamado em create_app()."""
 
     @app.exception_handler(AppException)
     async def handle_app_exception(_request: Request, exc: AppException) -> JSONResponse:
-        # Código 5XX loga como erro, se for 4XX loga como info, pois já é esperado
+        # 5xx é problema nosso: loga como erro. 4xx é esperado: loga como info.
         if exc.status_code >= 500:
             log.error("app_exception", error_code=exc.error_code, message=exc.message)
         else:
             log.info("app_exception", error_code=exc.error_code, message=exc.message)
-
         return _response(
             exc.status_code,
             _error_body(code=exc.error_code, message=exc.message, details=exc.details),
         )
 
-    @app.exception_handler(ValidationException)
-    async def handle_validation_error(_request: Request, exc: ValidationException) -> JSONResponse:
+    @app.exception_handler(RequestValidationError)
+    async def handle_validation_error(
+        _request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         log.info("request_validation_error", error_count=len(exc.errors()))
-
         return _response(
             422,
             _error_body(
                 code="validation_error",
                 message="Falha de validação na requisição.",
+                # exc.errors() é serializável (list de dicts) e mostra qual campo falhou.
                 details=exc.errors(),
             ),
         )
 
-    @app.exception_handler(StarletteHTTPExceptions)
-    async def handle_http_exception(
-        _request: Request, exc: StarletteHTTPExceptions
-    ) -> JSONResponse:
+    @app.exception_handler(StarletteHTTPException)
+    async def handle_http_exception(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
         return _response(
             exc.status_code,
-            _error_body(code="http_error", message=str(exc.detail())),
+            _error_body(code="http_error", message=str(exc.detail)),
         )
 
     @app.exception_handler(Exception)
     async def handle_unexpected(_request: Request, exc: Exception) -> JSONResponse:
+        # Loga o stack trace completo SEMPRE; expõe ao cliente só em dev.
         log.exception("unhandled_exception")
         message = str(exc) if settings.app.expose_internal_errors else "Erro interno do servidor."
-
         return _response(
             500,
-            _error_body(
-                code="internal_error",
-                message=message,
-            ),
+            _error_body(code="internal_error", message=message),
         )

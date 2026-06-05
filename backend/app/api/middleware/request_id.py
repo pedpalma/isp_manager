@@ -1,4 +1,15 @@
-# Middleware de Request ID
+# Middleware de Request ID.
+
+# Responsabilidade:
+# - Ler o header X-Request-ID se vier de um proxy/nginx (preserva a correlação
+#   ponta a ponta); senão, gerar um UUID4 novo.
+# - Amarrar o request_id no contexto do structlog (toda linha de log do request
+#   passa a incluí-lo automaticamente).
+# - Devolver o request_id no header X-Request-ID da resposta.
+# - Limpar o contexto ao fim, para não vazar para o próximo request no mesmo
+#   worker do uvicorn.
+
+
 from __future__ import annotations
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -7,11 +18,13 @@ from app.core.ids import is_valid_id, new_id_str
 from app.core.logging import bind_request_id, clear_request_context
 
 REQUEST_ID_HEADER = "x-request-id"
-_MAX_INBOUND_LEN = 128
+_MAX_INBOUND_LEN = 128  # limite defensivo para header vindo de fora
 
 
-class RequestMiddleware:
-    # Middleware ASGI puro
+class RequestIDMiddleware:
+    """Middleware ASGI puro (não BaseHTTPMiddleware) para preservar streaming e
+    não interferir no corpo da resposta."""
+
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
@@ -40,7 +53,7 @@ class RequestMiddleware:
         for name, value in scope.get("headers", []):
             if name == REQUEST_ID_HEADER.encode("latin-1"):
                 candidate = value.decode("latin-1").strip()
-                # Aceita UUID válido vindo do proxy.
+                # Aceita UUID válido vindo do proxy; senão ignora e gera o nosso.
                 if candidate and len(candidate) <= _MAX_INBOUND_LEN and is_valid_id(candidate):
                     return candidate
                 break

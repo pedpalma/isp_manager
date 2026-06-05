@@ -1,18 +1,18 @@
-# Aplica a convenção de nomes própria para o raw SQL evitando renomeações futuras e padronizando para o autogenerate do Alembic
+# Base declarativa do SQLAlchemy.
 
-# Mapa de chaves do SQLAlchemy -> prefixo personalizado:
-# ix -> idx_  (índices)
-# uq -> uq_   (unique)
-# ck -> chk_  (check)
-# fk -> fk_   (foreign key)
-# pk -> pk_   (primary key)
+# Mapa de chaves do SQLAlchemy -> nosso prefixo:
+#   ix -> idx_   (índices)
+#   uq -> uq_    (unique)
+#   ck -> chk_   (check)
+#   fk -> fk_    (foreign key)
+#   pk -> pk_    (primary key)
 
 from __future__ import annotations
 
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
 
-NAMING_CONVENTION: dict[str:str] = {
+NAMING_CONVENTION: dict[str, str] = {
     "ix": "idx_%(table_name)s_%(column_0_N_name)s",
     "uq": "uq_%(table_name)s_%(column_0_N_name)s",
     "ck": "chk_%(table_name)s_%(constraint_name)s",
@@ -22,5 +22,6 @@ NAMING_CONVENTION: dict[str:str] = {
 
 
 class Base(DeclarativeBase):
-    # Base de todos os modelos ORM.
+    """Base de todos os models ORM. Models de domínio herdam desta classe"""
+
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
