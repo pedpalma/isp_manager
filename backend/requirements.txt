@@ -61,6 +61,10 @@ email-validator==2.3.0
     # via
     #   fastapi
     #   pydantic
+factory-boy==3.3.3
+    # via -r requirements.in
+faker==40.21.0
+    # via factory-boy
 fastapi[standard]==0.136.3
     # via -r requirements.in
 fastapi-cli[standard]==0.0.24
@@ -83,6 +87,7 @@ httptools==0.8.0
     # via uvicorn
 httpx==0.28.1
     # via
+    #   -r requirements.in
     #   fastapi
     #   fastapi-cloud-cli
 idna==3.17
@@ -90,6 +95,8 @@ idna==3.17
     #   anyio
     #   email-validator
     #   httpx
+iniconfig==2.3.0
+    # via pytest
 jinja2==3.1.6
     # via fastapi
 kombu==5.6.2
@@ -114,11 +121,14 @@ packaging==26.2
     # via
     #   build
     #   kombu
+    #   pytest
     #   wheel
 pathspec==1.1.1
     # via mypy
 pip-tools==7.5.3
     # via -r requirements.in
+pluggy==1.6.0
+    # via pytest
 prompt-toolkit==3.0.52
     # via click-repl
 psycopg[binary]==3.3.4
@@ -143,7 +153,9 @@ pydantic-settings==2.14.1
     #   -r requirements.in
     #   fastapi
 pygments==2.20.0
-    # via rich
+    # via
+    #   pytest
+    #   rich
 pyjwt==2.13.0
     # via
     #   -r requirements.in
@@ -152,6 +164,12 @@ pyproject-hooks==1.2.0
     # via
     #   build
     #   pip-tools
+pytest==8.4.2
+    # via
+    #   -r requirements.in
+    #   pytest-asyncio
+pytest-asyncio==0.26.0
+    # via -r requirements.in
 python-dateutil==2.9.0.post0
     # via celery
 python-dotenv==1.2.2

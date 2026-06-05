@@ -180,3 +180,5 @@ frontend/src/lib/api/generated/
 # Configurações compartilhadas de Docker/Nginx.
 !infra/docker/
 !infra/nginx/
+
+requirements.txt
