@@ -34,3 +34,5 @@ celery_app.conf.update(
     # Marca a task como 'started' assim que o worker pega.
     task_track_started=True,
 )
+
+import app.core.celery_signals  # noqa: E402, F401
