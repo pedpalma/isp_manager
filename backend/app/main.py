@@ -29,6 +29,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    configure_logging()
+
     """Factory de aplicação."""
     app = FastAPI(
         title=settings.app.app_name,
