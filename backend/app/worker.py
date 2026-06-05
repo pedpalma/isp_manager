@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from celery.signals import worker_process_shutdown
 
+import app.core.celery_signals  # noqa: F401
 from app.celery_app import celery_app  # noqa: F401
 from app.db.session_sync import dispose_sync_engine
 
