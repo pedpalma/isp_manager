@@ -1,5 +1,21 @@
 # Handlers globais de exceção.
-
+#
+# Padroniza TODA resposta de erro no formato:
+#   {
+#     "error": {
+#       "code": "not_found",
+#       "message": "...",
+#       "details": {...} | null,
+#       "request_id": "..."        # correlaciona com os logs
+#     }
+#   }
+#
+# Cobre quatro casos:
+#   - AppException            -> erros de negócio (status/código vêm da exceção)
+#   - RequestValidationError  -> corpo/query inválidos (Pydantic/FastAPI) -> 422
+#   - HTTPException           -> HTTPException levantada manualmente
+#   - Exception               -> qualquer coisa não tratada -> 500 genérico
+#
 # Em dev (settings.app.expose_internal_errors == True) o 500 expõe a mensagem
 # real; em prod, devolve texto genérico e o detalhe fica só no log.
 
@@ -12,7 +28,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.middleware.request_id import REQUEST_ID_HEADER
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logging import get_logger, get_request_id
@@ -37,10 +52,10 @@ def _error_body(
 
 
 def _response(status_code: int, body: dict[str, Any]) -> JSONResponse:
-    # Repete o request_id no header também, por conveniência de quem consome.
-    request_id = get_request_id()
-    headers = {REQUEST_ID_HEADER: request_id} if request_id else None
-    return JSONResponse(status_code=status_code, content=body, headers=headers)
+    # O header X-Request-ID é adicionado pelo RequestIDMiddleware em TODA
+    # resposta (inclusive as de erro). Não duplicar aqui; o corpo já carrega
+    # o request_id em error.request_id.
+    return JSONResponse(status_code=status_code, content=body)
 
 
 def register_error_handlers(app: FastAPI) -> None:
