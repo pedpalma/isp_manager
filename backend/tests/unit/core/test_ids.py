@@ -13,7 +13,7 @@ def test_new_id_returns_uuid_and_is_unique():
 
 
 def test_new_id_str_is_parseable():
-    assert isinstance(UUID(new_id_str(), UUID))
+    assert isinstance(UUID(new_id_str()), UUID)
 
 
 def test_parse_id_accepts_uuid_and_str():
@@ -28,6 +28,6 @@ def test_parse_id_rejects_garbage(bad):
         parse_id(bad)
 
 
-def test_id_is_valid():
+def test_is_valid_id():
     assert is_valid_id(new_id_str()) is True
     assert is_valid_id("nope") is False

@@ -308,6 +308,7 @@ lint-frontend: ## Roda lint no frontend
 .PHONY: deps-compile
 deps-compile: ## Recompila requirements.txt a partir de requirements.in
 	@$(COMPOSE) exec $(SERVICE_API) pip-compile requirements.in --output-file requirements.txt
+	@$(COMPOSE) exec $(SERVICE_API) pip-compile requirements-dev.in --output-file=requirements-dev.txt
 
 .PHONY: deps-upgrade
 deps-upgrade: ## Atualiza todas as dependências para versões mais recentes

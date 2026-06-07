@@ -182,3 +182,4 @@ frontend/src/lib/api/generated/
 !infra/nginx/
 
 requirements.txt
+requirements-dev.txt
