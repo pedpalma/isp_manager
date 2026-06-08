@@ -27,7 +27,9 @@ RUN pip install --upgrade pip pip-tools
 COPY infra/scripts/wait-for-db.sh /usr/local/bin/wait-for-db
 RUN chmod +x /usr/local/bin/wait-for-db
 
-# DEPENDÊNCIAS PYTHON
+# DEPENDÊNCIAS PYTHON (PROD)
+# O estágio base instala APENAS o que vai para produção. O estágio dev acrescenta
+# as deps de teste/lint em cima disso, sem poluir a imagem de prod.
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
@@ -45,6 +47,24 @@ RUN apt-get update \
         git \
         vim-tiny \
     && rm -rf /var/lib/apt/lists/*
+
+# DEPENDÊNCIAS PYTHON (DEV)
+# requirements-dev.txt é o lock COMPLETO (prod + extras de dev), gerado por
+# pip-compile sobre requirements-dev.in (que faz "-r requirements.in").
+# Reinstalar sobre o que já veio do base é seguro e idempotente: pip detecta
+# o que já está satisfeito e instala somente os extras (pytest, pytest-asyncio,
+# factory-boy, httpx, ...). Resultado: imagem de dev tem tudo; imagem de prod
+# permanece enxuta.
+#
+# Esse passo precisa rodar no BUILD (não em runtime). O bind mount
+# ./backend:/app no compose sobrescreve /app, mas as deps vivem em
+# site-packages do sistema, fora de /app, portanto não são afetadas.
+COPY backend/requirements-dev.txt /tmp/requirements-dev.txt
+RUN pip install -r /tmp/requirements-dev.txt
+
+# Sanity check: falha o build se o lock estiver inconsistente com a imagem.
+# Custa milissegundos e evita o sintoma de "pytest sumiu" reaparecer no futuro.
+RUN python -c "import pytest, pytest_asyncio, factory, httpx"
 
 # Em dev rodamos como root para facilitar instalação ad-hoc de pacotes,
 # ajustes em arquivos via bind mount, etc. Em prod usamos user não-root.

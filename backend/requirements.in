@@ -29,8 +29,6 @@ structlog ~= 24.4
 
 
 # Dev tooling
-ruff ~= 0.6
-mypy ~= 1.11
 pip-tools ~= 7.4
 
 # Workers

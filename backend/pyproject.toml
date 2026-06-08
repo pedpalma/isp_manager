@@ -38,9 +38,36 @@ plugins = ["pydantic.mypy"]
 exclude = ["alembic/versions"]
 disallow_untyped_decorators = false
 
+# Códigos desligados GLOBALMENTE para reduzir ruído enquanto a base cresce.
+# Critério: só desligar o que vem de TERCEIROS (libs sem stubs, retornos
+# dinâmicos). A pressão para anotar código nosso continua ativa, porque
+# "no-untyped-def" NÃO está aqui (ele exige anotação em funções definidas
+# por nós).
+#
+# Cada item abaixo é dívida explícita. Endurecer marco a marco removendo
+# da lista conforme a base de código cresce e ganha stubs locais.
+disable_error_code = [
+    # Dispara em retornos `Any` vindos de json.loads, ORM dinâmico, faker.
+    # Reativar depois que as camadas de domínio tiverem DTOs/schemas estáveis.
+    "no-any-return",
+    # Dispara ao chamar funções sem stubs (celery, factory-boy). Esses
+    # pacotes raramente publicam types decentes. Reativar caso a caso
+    # quando criarmos wrappers tipados internos.
+    "no-untyped-call",
+]
+
+
 [[tool.mypy.overrides]]
 module = ["alembic.*", "celery", "celery.*"]
 ignore_missing_imports = true
+
+# Em testes não exigimos anotação total: fixtures e factories de
+# factory-boy vivem bem sem `-> None` em todo lugar, e o objetivo do
+# teste é exercitar o código de produção, não passar pelo mypy estrito.
+# Código de produção (app/*) continua com strict cheio.
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disable_error_code = ["no-untyped-def"]
 
 
 [tool.pytest.ini_options]
