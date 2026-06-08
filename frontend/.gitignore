@@ -1,0 +1,21 @@
+# dependências
+/node_modules
+
+# build / cache do Next
+/.next/
+/out/
+/build
+*.tsbuildinfo
+next-env.d.ts
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env locais (segredos ficam no .env da raiz; o front recebe só as URLs via compose)
+.env*.local
+
+# diversos
+.DS_Store
+*.pem
