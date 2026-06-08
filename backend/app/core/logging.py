@@ -1,4 +1,21 @@
 # Configuração central de logging estruturado (structlog).
+#
+# Único ponto de verdade do FORMATO de log para todos os caminhos:
+#
+#   1. configure_logging() é chamada no startup da API (dentro de create_app())
+#      e do worker (via setup_logging signal do Celery).
+#
+#   2. get_uvicorn_log_config() retorna o dictConfig do stdlib que o uvicorn
+#      aplica via --log-config no boot do container. Cobre o intervalo entre
+#      o uvicorn subir e o app.main:app ser importado (banner, ciclo do
+#      reloader, eventuais erros de import).
+#
+#   3. make_uvicorn_formatter() é a factory referenciada pelo dictConfig
+#      através de "()": "app.core.logging.make_uvicorn_formatter". Devolve o
+#      MESMO ProcessorFormatter que configure_logging() instala depois.
+#
+# Os três caminhos terminam usando _build_formatter() e _build_pre_chain().
+# Sem duplicação de configuração; sem chance de divergir.
 
 from __future__ import annotations
 
@@ -16,12 +33,16 @@ REQUEST_ID_KEY = "request_id"
 
 def _build_pre_chain() -> list[structlog.types.Processor]:
     """Cadeia de processadores compartilhada entre logs nativos do structlog
-    e logs estrangeiros (uvicorn, sqlalchemy, celery, watchfiles)."""
+    e logs estrangeiros (uvicorn, sqlalchemy, celery, watchfiles).
+
+    Retorna uma lista nova a cada chamada (processadores são objetos sem
+    estado relevante; segurança extra contra mutação acidental)."""
     return [
-        # Injeta o que estiver no contexto
+        # Injeta o que estiver no contexto (request_id, task_id, ...) em toda linha.
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
+        # Timestamp ISO-8601 em UTC (convenção do projeto: UTC no banco e nos logs).
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
@@ -29,7 +50,11 @@ def _build_pre_chain() -> list[structlog.types.Processor]:
 
 
 def _build_formatter() -> logging.Formatter:
-    """Constrói o processorFormatter usado em todos os caminhos"""
+    """Constrói o ProcessorFormatter usado em todos os caminhos.
+
+    Único ponto de verdade do FORMATO de log: tanto configure_logging() quanto
+    make_uvicorn_formatter() chegam aqui.
+    """
     use_json = settings.logging.log_format == "json"
     renderer: structlog.types.Processor = (
         structlog.processors.JSONRenderer()
@@ -38,7 +63,7 @@ def _build_formatter() -> logging.Formatter:
     )
     return structlog.stdlib.ProcessorFormatter(
         foreign_pre_chain=_build_pre_chain(),
-        processor=[
+        processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             renderer,
         ],
@@ -46,12 +71,25 @@ def _build_formatter() -> logging.Formatter:
 
 
 def make_uvicorn_formatter() -> logging.Formatter:
-    """Factory chamada pelo dictConfig do uvicorn via sintaxe "()"."""
+    """Factory chamada pelo dictConfig do uvicorn via sintaxe "()".
+
+    Necessária porque o dictConfig serializado em JSON não consegue carregar
+    callables diretamente. O JSON aponta para cá pelo nome qualificado e
+    nós devolvemos a instância configurada do ProcessorFormatter."""
     return _build_formatter()
 
 
-def get_uvicorn_log_config() -> dict[str:Any]:
-    """Retorna o dictConfig que o uvicorn aplica via --log-config no boot."""
+def get_uvicorn_log_config() -> dict[str, Any]:
+    """Retorna o dictConfig que o uvicorn aplica via --log-config no boot.
+
+    Único ponto de verdade do CONFIG de log do uvicorn. Renderizado para JSON
+    por backend/scripts/render_uvicorn_log_config.py e passado ao uvicorn no
+    entrypoint do container.
+
+    Garantia: o formatter instanciado por make_uvicorn_formatter() (referenciado
+    abaixo) é EXATAMENTE o mesmo que configure_logging() instala depois, dentro
+    de create_app(). Não há duplicação de formato entre os dois caminhos.
+    """
     level = settings.logging.log_level
     return {
         "version": 1,
@@ -107,8 +145,16 @@ def get_uvicorn_log_config() -> dict[str:Any]:
 
 
 def configure_logging() -> None:
-    """Configura structlog + stdlib logging. Idempotente o suficiente para ser
-    chamada no startup da API e do worker."""
+    """Configura structlog + stdlib logging.
+
+    Idempotente o suficiente para ser chamada no startup da API (dentro de
+    create_app()) e do worker (via setup_logging signal do Celery).
+
+    Na API, esta função roda DEPOIS do uvicorn ter aplicado o --log-config.
+    Como o formatter usado nos dois caminhos é o mesmo (via _build_formatter()),
+    a saída permanece consistente. Esta função reconstrói o handler do root
+    para garantir que reconfigurações posteriores também sigam o mesmo formato.
+    """
     level = logging.getLevelName(settings.logging.log_level)
     pre_chain = _build_pre_chain()
 
@@ -156,7 +202,6 @@ def configure_logging() -> None:
     ):
         lg = logging.getLogger(name)
         lg.handlers.clear()
-        lg.propagate = True
         lg.propagate = True
 
 
