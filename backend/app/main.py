@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import register_error_handlers
 from app.api.middleware.logging import LoggingMiddleware
@@ -46,13 +47,27 @@ def create_app() -> FastAPI:
     )
 
     # Middlewares
+    # Fluxo de entrada de uma requisição: CORS -> RequestID -> Logging -> rota.
+
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.app.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        # X-Request-ID permitido na requisição (correlação iniciada no cliente).
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        # X-Request-ID exposto para o navegador conseguir LER o id na resposta.
+        expose_headers=["X-Request-ID"],
+        # Cacheia o resultado do preflight por 10 min.
+        max_age=600,
+    )
 
-    # ----- Handlers globais de erro (resposta JSON padronizada) -----
+    # Handlers globais de erro (resposta JSON padronizada)
     register_error_handlers(app)
 
-    # ----- Rotas -----
+    # Rotas
     # Health fora do prefixo /api/v1 (contrato de infraestrutura).
     app.include_router(health.router)
     # Diagnóstico sob o prefixo de versão.
