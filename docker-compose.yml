@@ -201,6 +201,10 @@ services:
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
 
+    # Sem "command:" aqui de propósito: vale o CMD do Dockerfile (npm run dev).
+    # IMPORTANTE: NÃO usamos env_file: .env neste serviço. O frontend não deve
+    # receber senhas do Postgres nem a API_SECRET_KEY; passamos só as URLs acima.
+
     ports:
       - "3000:3000"
 
@@ -212,8 +216,7 @@ services:
     # Liveness do próprio frontend via route handler leve (/api/health),
     # que não depende de compilar a página inteira no primeiro acesso.
     healthcheck:
-      test:
-        ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

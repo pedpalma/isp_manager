@@ -46,13 +46,20 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if settings.app.enable_api_docs else None,
     )
 
-    # Middlewares
+    # ----- Middlewares -----
+    # ORDEM IMPORTA. No Starlette, o ÚLTIMO add_middleware é o mais EXTERNO.
     # Fluxo de entrada de uma requisição: CORS -> RequestID -> Logging -> rota.
-
+    #
+    #   1) LoggingMiddleware  (mais interno): loga já com o request_id no contexto.
+    #   2) RequestIDMiddleware: amarra/propaga o request_id antes do logging.
+    #   3) CORSMiddleware     (mais externo): responde o preflight OPTIONS antes
+    #      de gerar request_id/log (menos ruído) e embrulha TODAS as respostas,
+    #      inclusive as de erro, com os cabeçalhos CORS.
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(
         CORSMiddleware,
+        # Lista explícita vinda de CORS_ORIGINS. NUNCA "*" com credenciais.
         allow_origins=settings.app.cors_origins_list,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -60,14 +67,14 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         # X-Request-ID exposto para o navegador conseguir LER o id na resposta.
         expose_headers=["X-Request-ID"],
-        # Cacheia o resultado do preflight por 10 min.
+        # Cacheia o resultado do preflight por 10 min (menos OPTIONS repetidos).
         max_age=600,
     )
 
-    # Handlers globais de erro (resposta JSON padronizada)
+    # ----- Handlers globais de erro (resposta JSON padronizada) -----
     register_error_handlers(app)
 
-    # Rotas
+    # ----- Rotas -----
     # Health fora do prefixo /api/v1 (contrato de infraestrutura).
     app.include_router(health.router)
     # Diagnóstico sob o prefixo de versão.

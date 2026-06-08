@@ -20,11 +20,14 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Camada de dependências
+# ----- Camada de dependências -----
 # Copia SÓ os manifestos e instala. Esta camada fica em cache enquanto
 # package.json / package-lock.json não mudarem, deixando o rebuild rápido
 # quando só o código-fonte muda.
-
+#
+# O contexto de build é a raiz do repositório (ver docker-compose), por isso
+# os caminhos começam em "frontend/".
+#
 # npm ci exige o package-lock.json e instala EXATAMENTE o que está travado nele
 # (instalação reprodutível). Na primeira subida, o conteúdo de /app/node_modules
 # desta camada é copiado para o volume nomeado frontend_node_modules.
