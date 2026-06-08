@@ -99,18 +99,19 @@ services:
       REDIS_PORT: 6379
       PYTHONPATH: /app
 
+    # `exec` na segunda linha substitui o processo bash pelo uvicorn,
+    # mantendo tini -> uvicorn (PID 1 propaga sinais corretamente).
     command:
-      [
-        "uvicorn",
-        "app.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8000",
-        "--reload",
-        "--reload-dir",
-        "/app/app",
-      ]
+      - "bash"
+      - "-c"
+      - |
+        python /app/scripts/render_uvicorn_log_config.py > /tmp/uvicorn_log.json && \
+        exec uvicorn app.main:app \
+          --host 0.0.0.0 \
+          --port 8000 \
+          --reload \
+          --reload-dir /app/app \
+          --log-config /tmp/uvicorn_log.json
 
     ports:
       - "8000:8000"
@@ -167,6 +168,8 @@ services:
       # Garante que a build da imagem aconteceu primeiro (api compartilha image).
       api:
         condition: service_started
+    # Worker não precisa de --log-config: setup_logging do Celery já chama
+    # configure_logging() no boot do worker (signal em app.core.celery_signals).
     command: celery -A app.worker:celery_app worker --loglevel=INFO
     healthcheck:
       test:
@@ -216,7 +219,8 @@ services:
     # Liveness do próprio frontend via route handler leve (/api/health),
     # que não depende de compilar a página inteira no primeiro acesso.
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      test:
+        ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
