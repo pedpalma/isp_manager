@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import Any
 
 import structlog
 
@@ -11,6 +12,98 @@ from app.core.config import settings
 
 # Chave usada para correlação de requests entre API e worker.
 REQUEST_ID_KEY = "request_id"
+
+
+def _build_pre_chain() -> list[structlog.types.Processor]:
+    """Cadeia de processadores compartilhada entre logs nativos do structlog
+    e logs estrangeiros (uvicorn, sqlalchemy, celery, watchfiles)."""
+    return [
+        # Injeta o que estiver no contexto
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+    ]
+
+
+def _build_formatter() -> logging.Formatter:
+    """Constrói o processorFormatter usado em todos os caminhos"""
+    use_json = settings.logging.log_format == "json"
+    renderer: structlog.types.Processor = (
+        structlog.processors.JSONRenderer()
+        if use_json
+        else structlog.dev.ConsoleRenderer(colors=True)
+    )
+    return structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=_build_pre_chain(),
+        processor=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            renderer,
+        ],
+    )
+
+
+def make_uvicorn_formatter() -> logging.Formatter:
+    """Factory chamada pelo dictConfig do uvicorn via sintaxe "()"."""
+    return _build_formatter()
+
+
+def get_uvicorn_log_config() -> dict[str:Any]:
+    """Retorna o dictConfig que o uvicorn aplica via --log-config no boot."""
+    level = settings.logging.log_level
+    return {
+        "version": 1,
+        # CRÍTICO: NÃO desabilitar loggers já criados. Se for True, qualquer
+        # logger instanciado antes do dictConfig rodar (e há vários no uvicorn)
+        # fica mudo. Quebra o boot inteiro de forma confusa.
+        "disable_existing_loggers": False,
+        "formatters": {
+            "structlog": {
+                # Sintaxe "()" do logging.config: instancia chamando a factory.
+                # Tem que ser caminho importável completo.
+                "()": "app.core.logging.make_uvicorn_formatter",
+            },
+        },
+        "handlers": {
+            "default": {
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+                "formatter": "structlog",
+            },
+        },
+        "loggers": {
+            "uvicorn": {
+                "level": level,
+                "handlers": ["default"],
+                "propagate": False,
+            },
+            "uvicorn.error": {
+                "level": level,
+                "handlers": ["default"],
+                "propagate": False,
+            },
+            # uvicorn.access: silenciado. Nosso LoggingMiddleware já loga cada
+            # request com mais contexto (request_id, duração).
+            "uvicorn.access": {
+                "level": "WARNING",
+                "handlers": [],
+                "propagate": False,
+            },
+            # watchfiles: usado pelo --reload em dev. Em prod (sem --reload),
+            # estes loggers ficam ociosos. Propagam para o root para sair em JSON.
+            "watchfiles": {"level": "INFO", "handlers": [], "propagate": True},
+            "watchfiles.main": {"level": "INFO", "handlers": [], "propagate": True},
+            "watchfiles.watcher": {"level": "INFO", "handlers": [], "propagate": True},
+        },
+        # Root captura todo o resto (sqlalchemy, celery, código do app que
+        # eventualmente logue antes de configure_logging() rodar).
+        "root": {
+            "level": level,
+            "handlers": ["default"],
+        },
+    }
 
 
 def configure_logging() -> None:
