@@ -110,26 +110,7 @@ def configure_logging() -> None:
     """Configura structlog + stdlib logging. Idempotente o suficiente para ser
     chamada no startup da API e do worker."""
     level = logging.getLevelName(settings.logging.log_level)
-    use_json = settings.logging.log_format == "json"
-
-    # Cadeia de processadores compartilhada entre logs nativos do structlog e
-    # logs "estrangeiros" (stdlib: uvicorn, sqlalchemy, etc.).
-    pre_chain: list[structlog.types.Processor] = [
-        # Injeta o que estiver no contexto (request_id) em toda linha.
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
-        # Timestamp ISO-8601 em UTC (convenção do projeto: UTC no banco e nos logs).
-        structlog.processors.TimeStamper(fmt="iso", utc=True),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-    ]
-
-    renderer: structlog.types.Processor = (
-        structlog.processors.JSONRenderer()
-        if use_json
-        else structlog.dev.ConsoleRenderer(colors=True)
-    )
+    pre_chain = _build_pre_chain()
 
     # structlog nativo: aplica a pre_chain e entrega ao ProcessorFormatter da stdlib.
     structlog.configure(
@@ -139,15 +120,8 @@ def configure_logging() -> None:
         cache_logger_on_first_use=True,
     )
 
-    # Formatter único usado pelo handler raiz da stdlib. `foreign_pre_chain`
-    # aplica a mesma cadeia aos logs que NÃO vieram do structlog.
-    formatter = structlog.stdlib.ProcessorFormatter(
-        foreign_pre_chain=pre_chain,
-        processors=[
-            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-            renderer,
-        ],
-    )
+    # Formatter único; reusado pelo handler raiz.
+    formatter = _build_formatter()
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
@@ -160,16 +134,29 @@ def configure_logging() -> None:
     root.addHandler(handler)
     root.setLevel(level)
 
-    # uvicorn.access é barulhento e tem formato próprio: silenciamos o handler
-    # dele porque o nosso LoggingMiddleware já loga cada request com mais contexto.
+    # uvicorn.access: silenciado. Nosso LoggingMiddleware já loga cada request
+    # com mais contexto. (Mesma decisão do dictConfig acima; replicada aqui
+    # porque configure_logging() pode rodar em contextos sem --log-config,
+    # como dentro do worker Celery.)
     access = logging.getLogger("uvicorn.access")
     access.handlers.clear()
     access.propagate = False
 
-    # Garante que uvicorn.error e sqlalchemy propaguem para o nosso handler raiz.
-    for name in ("uvicorn", "uvicorn.error", "sqlalchemy.engine", "celery"):
+    # Garante que estes loggers propaguem para o nosso handler raiz, descartando
+    # quaisquer handlers próprios que o dictConfig do uvicorn possa ter
+    # instalado neles. Resultado: uma única linha por log, no formato certo.
+    for name in (
+        "uvicorn",
+        "uvicorn.error",
+        "sqlalchemy.engine",
+        "celery",
+        "watchfiles",
+        "watchfiles.main",
+        "watchfiles.watcher",
+    ):
         lg = logging.getLogger(name)
         lg.handlers.clear()
+        lg.propagate = True
         lg.propagate = True
 
 
