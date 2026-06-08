@@ -1,4 +1,4 @@
-# Next.js 15 em modo desenvolvimento.
+# Next.js (dev): instala dependências em camada cacheada; o código entra por bind mount.
 
 FROM node:22-bookworm-slim AS dev
 
@@ -9,7 +9,8 @@ ENV NODE_ENV=development \
     # Faz npm/pnpm/yarn pularem prompts interativos
     CI=true
 
-# Dependências de sistema mínimas. 
+# Dependências de sistema mínimas.
+# curl é usado pelo healthcheck do container (ver docker-compose).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \
@@ -18,6 +19,20 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Camada de dependências
+# Copia SÓ os manifestos e instala. Esta camada fica em cache enquanto
+# package.json / package-lock.json não mudarem, deixando o rebuild rápido
+# quando só o código-fonte muda.
+
+# npm ci exige o package-lock.json e instala EXATAMENTE o que está travado nele
+# (instalação reprodutível). Na primeira subida, o conteúdo de /app/node_modules
+# desta camada é copiado para o volume nomeado frontend_node_modules.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+# Em dev NÃO copiamos o restante do código: ele entra por bind mount
+# (./frontend:/app no compose), preservando o hot reload.
 
 # Encaminhamento correto de SIGTERM (graceful shutdown do next dev).
 ENTRYPOINT ["/usr/bin/tini", "--"]
