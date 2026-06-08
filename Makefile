@@ -159,6 +159,13 @@ logs-frontend: ## Logs apenas do frontend
 logs-db: ## Logs apenas do Postgres
 	@$(COMPOSE) logs -f --tail=200 $(SERVICE_DB)
 
+.PHONY: logs-json
+logs-json: ## Logs JSON puros de api e worker (sem prefixo, filtrados, prontos para jq)
+	@command -v jq >/dev/null 2>&1 || { echo "$(COLOR_RED) ✗ jq não encontrado no host. Instale: apt install jq (ou brew install jq).$(COLOR_RESET)"; exit 1; }
+	@$(COMPOSE) logs -f --no-log-prefix --tail=100 $(SERVICE_API) $(SERVICE_WORKER) \
+		| grep --line-buffered '^{' \
+		| jq -c .
+
 
 # ACESSO INTERATIVO (shells)
 
@@ -357,7 +364,7 @@ prune: ## Remove containers/imagens/volumes do Docker NÃO usados (sistema todo)
 .PHONY: info
 info: ## Mostra informações úteis do ambiente
 	@echo ""
-	@echo "$(COLOR_BOLD)isp_manager — info do ambiente$(COLOR_RESET)"
+	@echo "$(COLOR_BOLD)isp_manager info do ambiente$(COLOR_RESET)"
 	@echo ""
 	@echo "  Docker:         $$(docker --version)"
 	@echo "  Compose:        $$(docker compose version --short)"
