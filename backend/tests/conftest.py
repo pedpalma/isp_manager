@@ -65,3 +65,72 @@ def _build_app() -> FastAPI:
 def client() -> TestClient:
     # raise_server_exceptions=False
     return TestClient(_build_app(), raise_server_exceptions=False)
+
+
+# ============================================================================
+# Marco 9: fixtures para testes que tocam o banco real.
+# ============================================================================
+#
+# - `real_client`: TestClient da aplicação REAL (create_app + lifespan).
+#   Faz init_engine no startup do TestClient; conecta no Postgres do compose.
+#   Session-scoped: o lifespan roda UMA vez para toda a suíte de testes.
+#
+# - `_inventory_cleanup_session_scope`: roda ANTES e DEPOIS da sessão,
+#   removendo registros com prefixo `pytest-`. Mantém o banco de dev limpo
+#   entre execuções. Se o banco estiver indisponível, é no-op (silencioso).
+#
+# Pré-requisito para os testes de integração: `docker compose up` rodando.
+
+PYTEST_PREFIX = "pytest-"
+
+
+def _try_inventory_cleanup() -> None:
+    """Best-effort: deleta registros do inventário com prefixo `pytest-`.
+    Silencioso em qualquer erro (banco fora, schema inexistente, etc.)."""
+    try:
+        from sqlalchemy import create_engine, text  # noqa: PLC0415
+
+        from app.core.config import settings as _settings  # noqa: PLC0415
+
+        engine = create_engine(_settings.database.build_app_sync_url())
+        try:
+            with engine.connect() as conn, conn.begin():
+                # Ordem importa: filhos antes de pais por causa das FKs.
+                conn.execute(
+                    text("DELETE FROM onu_model WHERE model LIKE :p"),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text("DELETE FROM olt_model WHERE model LIKE :p"),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text("DELETE FROM manufacturer WHERE slug LIKE :p"),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+        finally:
+            engine.dispose()
+    except Exception:
+        # Cleanup nunca deve quebrar a saída do pytest.
+        return
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _inventory_cleanup_session_scope():
+    """Limpa antes E depois da sessão. Limpar antes evita interferência de
+    runs anteriores que tenham crashado no meio."""
+    _try_inventory_cleanup()
+    yield
+    _try_inventory_cleanup()
+
+
+@pytest.fixture(scope="session")
+def real_client():
+    """TestClient da aplicação real. O `with` aciona o lifespan: startup
+    chama init_engine() (conecta no Postgres), shutdown chama dispose_engine()."""
+    # Import lazy: evita carregar app.main no momento do collect do pytest.
+    from app.main import create_app  # noqa: PLC0415
+
+    app = create_app()
+    with TestClient(app) as c:
+        yield c

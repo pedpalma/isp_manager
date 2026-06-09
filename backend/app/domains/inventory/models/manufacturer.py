@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import Boolean, Text
+from sqlalchemy import Boolean, Text, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,12 +23,16 @@ class Manufacturer(Base, TimestampMixin):
 
     __tablename__ = "manufacturer"
 
-    # `manufacturer_id` sem default no ORM. O DDL tem
-    # `DEFAULT gen_random_uuid()`; deixamos o Postgres gerar e o SQLAlchemy
-    # recupera o valor via RETURNING automático após o INSERT.
+    # `server_default=text("gen_random_uuid()")` é OBRIGATÓRIO aqui. Sem ele,
+    # o SQLAlchemy desconhece que o banco gera o UUID e tenta enviar NULL no
+    # INSERT, violando o NOT NULL implícito da PK. Com ele, o ORM:
+    #   1) sabe que o servidor gera o valor,
+    #   2) OMITE a coluna do INSERT (deixando o DDL `DEFAULT gen_random_uuid()` agir),
+    #   3) lê o valor gerado via RETURNING automático.
     manufacturer_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         primary_key=True,
+        server_default=text("gen_random_uuid()"),
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     # `unique=True` aqui só serve para o ORM "saber" da unicidade. A
@@ -42,5 +46,4 @@ class Manufacturer(Base, TimestampMixin):
     # created_at e updated_at vêm do TimestampMixin.
 
     def __repr__(self) -> str:
-        # Útil em logs/debug. Não inclui PII (não há aqui, mas fica o padrão).
         return f"<Manufacturer slug={self.slug!r} active={self.active}>"

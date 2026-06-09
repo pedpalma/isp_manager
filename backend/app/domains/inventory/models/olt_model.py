@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,9 +20,12 @@ class OltModel(Base, TimestampMixin):
 
     __tablename__ = "olt_model"
 
+    # `server_default=text("gen_random_uuid()")`: ver justificativa em
+    # manufacturer.py. Sem isso, o INSERT envia NULL e viola NOT NULL da PK.
     olt_model_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         primary_key=True,
+        server_default=text("gen_random_uuid()"),
     )
     manufacturer_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
