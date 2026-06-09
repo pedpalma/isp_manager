@@ -33,7 +33,11 @@ class OnuModelRepository:
     async def get_by_manufacturer_and_vendor_id(
         self, manufacturer_id: UUID, vendor_id: str
     ) -> OnuModel | None:
-        """Casa uma ONU descoberta com seu modelo via vendor_id GPON."""
+        """Casa uma ONU descoberta com seu modelo via vendor_id GPON.
+
+        Útil mais à frente, na rotina de descoberta de ONUs pendentes
+        (Marco da etapa 2 da V1).
+        """
         stmt = select(OnuModel).where(
             OnuModel.manufacturer_id == manufacturer_id,
             OnuModel.vendor_id == vendor_id,

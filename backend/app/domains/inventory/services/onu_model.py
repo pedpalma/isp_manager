@@ -1,6 +1,8 @@
-# Service do OnuModel e regras de negócio.
-# Particularidade em relação ao OltModel: o `vendor_id` tem unicidade PARCIAL no banco (UNIQUE WHERE vendor_id IS NOT NULL).
-# É preciso validar isso explicitamente, porque o ORM não consegue ler a constraint parcial.
+# Service do OnuModel.
+#
+# Particularidade em relação ao OltModel: o `vendor_id` tem unicidade
+# PARCIAL no banco (UNIQUE WHERE vendor_id IS NOT NULL). Precisamos validar
+# isso explicitamente, porque o ORM não consegue ler a constraint parcial.
 
 from __future__ import annotations
 
@@ -65,7 +67,9 @@ class OnuModelService:
         if manufacturer is None:
             raise ManufacturerNotFound(data.manufacturer_id)
 
-        existing = await self._repo.get_by_manufacturer_and_model(data.manufacturer_id, data.model)
+        existing = await self._repo.get_by_manufacturer_and_model(
+            data.manufacturer_id, data.model
+        )
         if existing is not None:
             raise OnuModelConflict(data.manufacturer_id, data.model)
 
@@ -90,6 +94,11 @@ class OnuModelService:
             await self._session.commit()
         except IntegrityError as exc:
             await self._session.rollback()
+            # Em corrida (race), pode ser conflito de (model) OU de
+            # (vendor_id). Sem inspecionar a constraint, devolvemos o
+            # conflito de model (mais comum). O detail traz o suficiente
+            # para o cliente entender, e o request_id permite cruzar com
+            # o log.
             raise OnuModelConflict(data.manufacturer_id, data.model) from exc
 
         log.info(

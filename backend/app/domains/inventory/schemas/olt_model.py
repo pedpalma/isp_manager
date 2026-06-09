@@ -1,4 +1,5 @@
 # Schemas Pydantic v2 do OltModel.
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -37,6 +38,6 @@ class OltModelUpdate(BaseModel):
 class OltModelRead(OltModelBase):
     model_config = ConfigDict(from_attributes=True)
 
-    olt_model: UUID
+    olt_model_id: UUID
     created_at: datetime
     updated_at: datetime

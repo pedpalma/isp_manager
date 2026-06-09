@@ -21,7 +21,7 @@ from app.domains.inventory.services.onu_model import OnuModelService
 router = APIRouter(prefix="/onu-models", tags=["inventory:onu-models"])
 
 
-def get_service(session: AsyncSession = Depends(get_session)) -> OnuModelService:  # noqa: B008
+def get_service(session: AsyncSession = Depends(get_session)) -> OnuModelService:
     return OnuModelService(session)
 
 
@@ -31,9 +31,9 @@ def get_service(session: AsyncSession = Depends(get_session)) -> OnuModelService
     summary="Lista modelos de ONU (paginada)",
 )
 async def list_onu_models(
-    params: PageParams = Depends(page_params),  # noqa: B008
+    params: PageParams = Depends(page_params),
     only_active: bool = Query(default=False),
-    manufacturer_id: UUID | None = Query(default=None),  # noqa: B008
+    manufacturer_id: UUID | None = Query(default=None),
     category: str | None = Query(
         default=None,
         max_length=100,
@@ -44,8 +44,8 @@ async def list_onu_models(
         max_length=200,
         description="Filtro `LIKE` no nome do modelo (case-insensitive).",
     ),
-    service: OnuModelService = Depends(get_service),  # noqa: B008
-    actor: Actor = Depends(get_current_actor),  # noqa: B008
+    service: OnuModelService = Depends(get_service),
+    actor: Actor = Depends(get_current_actor),
 ) -> Page[OnuModelRead]:
     items, total = await service.list_page(
         offset=params.offset,
@@ -67,8 +67,8 @@ async def list_onu_models(
 @router.get("/{onu_model_id}", response_model=OnuModelRead)
 async def get_onu_model(
     onu_model_id: UUID,
-    service: OnuModelService = Depends(get_service),  # noqa: B008
-    actor: Actor = Depends(get_current_actor),  # noqa: B008
+    service: OnuModelService = Depends(get_service),
+    actor: Actor = Depends(get_current_actor),
 ) -> OnuModelRead:
     m = await service.get(onu_model_id, actor=actor)
     return OnuModelRead.model_validate(m)
@@ -81,8 +81,8 @@ async def get_onu_model(
 )
 async def create_onu_model(
     data: OnuModelCreate,
-    service: OnuModelService = Depends(get_service),  # noqa: B008
-    actor: Actor = Depends(get_current_actor),  # noqa: B008
+    service: OnuModelService = Depends(get_service),
+    actor: Actor = Depends(get_current_actor),
 ) -> OnuModelRead:
     m = await service.create(data, actor=actor)
     return OnuModelRead.model_validate(m)
@@ -92,8 +92,8 @@ async def create_onu_model(
 async def update_onu_model(
     onu_model_id: UUID,
     data: OnuModelUpdate,
-    service: OnuModelService = Depends(get_service),  # noqa: B008
-    actor: Actor = Depends(get_current_actor),  # noqa: B008
+    service: OnuModelService = Depends(get_service),
+    actor: Actor = Depends(get_current_actor),
 ) -> OnuModelRead:
     m = await service.update(onu_model_id, data, actor=actor)
     return OnuModelRead.model_validate(m)

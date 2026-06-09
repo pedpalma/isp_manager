@@ -1,5 +1,7 @@
 # Model ORM da tabela `olt_model`.
-# Mapeia o catálogo de modelos de OLT por fabricante.
+#
+# Mapeia o catálogo de modelos de OLT por fabricante. Sem firmware aqui
+# (firmware é granularidade do `olt_command_profile`, do próximo bloco).
 
 from __future__ import annotations
 
@@ -24,7 +26,9 @@ class OltModel(Base, TimestampMixin):
     )
     manufacturer_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
-        # Não dá para apagar fabricante se ainda houver modelos vinculados.
+        # ON DELETE não declarado: o DDL não tem, então sai como RESTRICT
+        # (padrão). É o comportamento desejado: não dá para apagar fabricante
+        # se ainda houver modelos vinculados.
         ForeignKey("manufacturer.manufacturer_id"),
         nullable=False,
     )
@@ -33,7 +37,7 @@ class OltModel(Base, TimestampMixin):
 
     __table_args__ = (
         # Reflete a constraint `uq_olt_model` do DDL.sql.
-        UniqueConstraint("manufacturer_id", "model", name="uq_olt_model")
+        UniqueConstraint("manufacturer_id", "model", name="uq_olt_model"),
     )
 
     def __repr__(self) -> str:

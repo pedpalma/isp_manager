@@ -21,7 +21,7 @@ from app.domains.inventory.services.olt_model import OltModelService
 router = APIRouter(prefix="/olt-models", tags=["inventory:olt-models"])
 
 
-def get_service(session: AsyncSession = Depends(get_session)) -> OltModelService:  # noqa: B008
+def get_service(session: AsyncSession = Depends(get_session)) -> OltModelService:
     return OltModelService(session)
 
 
@@ -31,9 +31,9 @@ def get_service(session: AsyncSession = Depends(get_session)) -> OltModelService
     summary="Lista modelos de OLT (paginada)",
 )
 async def list_olt_models(
-    params: PageParams = Depends(page_params),  # noqa: B008
+    params: PageParams = Depends(page_params),
     only_active: bool = Query(default=False),
-    manufacturer_id: UUID | None = Query(  # noqa: B008
+    manufacturer_id: UUID | None = Query(
         default=None,
         description="Filtra por fabricante.",
     ),
@@ -42,8 +42,8 @@ async def list_olt_models(
         max_length=200,
         description="Filtro `LIKE` no nome do modelo (case-insensitive).",
     ),
-    service: OltModelService = Depends(get_service),  # noqa: B008
-    actor: Actor = Depends(get_current_actor),  # noqa: B008
+    service: OltModelService = Depends(get_service),
+    actor: Actor = Depends(get_current_actor),
 ) -> Page[OltModelRead]:
     items, total = await service.list_page(
         offset=params.offset,
@@ -64,8 +64,8 @@ async def list_olt_models(
 @router.get("/{olt_model_id}", response_model=OltModelRead)
 async def get_olt_model(
     olt_model_id: UUID,
-    service: OltModelService = Depends(get_service),  # noqa: B008
-    actor: Actor = Depends(get_current_actor),  # noqa: B008
+    service: OltModelService = Depends(get_service),
+    actor: Actor = Depends(get_current_actor),
 ) -> OltModelRead:
     m = await service.get(olt_model_id, actor=actor)
     return OltModelRead.model_validate(m)
@@ -78,8 +78,8 @@ async def get_olt_model(
 )
 async def create_olt_model(
     data: OltModelCreate,
-    service: OltModelService = Depends(get_service),  # noqa: B008
-    actor: Actor = Depends(get_current_actor),  # noqa: B008
+    service: OltModelService = Depends(get_service),
+    actor: Actor = Depends(get_current_actor),
 ) -> OltModelRead:
     m = await service.create(data, actor=actor)
     return OltModelRead.model_validate(m)
@@ -89,8 +89,8 @@ async def create_olt_model(
 async def update_olt_model(
     olt_model_id: UUID,
     data: OltModelUpdate,
-    service: OltModelService = Depends(get_service),  # noqa: B008
-    actor: Actor = Depends(get_current_actor),  # noqa: B008
+    service: OltModelService = Depends(get_service),
+    actor: Actor = Depends(get_current_actor),
 ) -> OltModelRead:
     m = await service.update(olt_model_id, data, actor=actor)
     return OltModelRead.model_validate(m)

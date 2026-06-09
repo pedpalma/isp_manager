@@ -77,10 +77,10 @@ def create_app() -> FastAPI:
         max_age=600,
     )
 
-    # Handlers globais de erro
+    # ----- Handlers globais de erro (resposta JSON padronizada) -----
     register_error_handlers(app)
 
-    # Rotas
+    # ----- Rotas -----
     # Health fora do prefixo /api/v1 (contrato de infraestrutura).
     app.include_router(health.router)
     # Sob /api/v1.

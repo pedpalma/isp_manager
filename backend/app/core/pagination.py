@@ -1,5 +1,9 @@
 # Paginação reutilizável.
+#
 # Padrão simples offset/limit, suficiente para listas curtas de catálogo.
+# Para tabelas com volume alto (ex.: optical_reading) vamos avaliar cursor
+# pagination no marco correspondente.
+
 from __future__ import annotations
 
 from typing import Generic, TypeVar
@@ -13,8 +17,13 @@ T = TypeVar("T")
 class PageParams(BaseModel):
     """Parâmetros de paginação lidos da query string da requisição."""
 
-    page: int = Field(default=1, ge=1, description="Página começa em 1.")
-    page_size: int = Field(default=50, ge=1, le=200, description="Itens por página (máximo 200)")
+    page: int = Field(default=1, ge=1, description="Página, começa em 1.")
+    page_size: int = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="Itens por página (máximo 200).",
+    )
 
     @property
     def offset(self) -> int:
@@ -28,19 +37,28 @@ class PageParams(BaseModel):
 
 
 def page_params(
-    page: int = Query(default=1, ge=1, description="Página começa em 1."),
-    page_size: int = Query(default=50, ge=1, le=200, description="Itens por página (máximo 200)"),
+    page: int = Query(default=1, ge=1, description="Página, começa em 1."),
+    page_size: int = Query(
+        default=50,
+        ge=1,
+        le=200,
+        description="Itens por página (máximo 200).",
+    ),
 ) -> PageParams:
-    """Dependency: lê `?page=...&page_size=...` da URL e devolve `PageParams`"""
+    """Dependency: lê `?page=...&page_size=...` da URL e devolve `PageParams`.
+
+    Usado nas rotas como `params: PageParams = Depends(page_params)`.
+    Mantemos esta função separada do BaseModel acima para o FastAPI gerar a
+    documentação OpenAPI com cada parâmetro listado individualmente.
+    """
     return PageParams(page=page, page_size=page_size)
 
 
-class Page(BaseModel, Generic[T]):  # noqa: UP046
+class Page(BaseModel, Generic[T]):
     """Página de resultados retornada pelas rotas de listagem."""
 
     # Permite que o response_model=Page[XxxRead] funcione com instâncias
     # ORM dentro de `items` (via ManufacturerRead.model_validate(orm_obj)).
-
     model_config = ConfigDict(from_attributes=True)
 
     items: list[T] = Field(description="Itens desta página.")

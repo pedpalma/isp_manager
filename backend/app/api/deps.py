@@ -1,11 +1,15 @@
 # Dependências compartilhadas entre rotas (`Depends(...)` do FastAPI).
+
 from __future__ import annotations
 
 from app.core.actor import Actor, system_actor
 
 
 def get_current_actor() -> Actor:
-    """Devolve o ator atual da requisição. este helper vai:
+    """Devolve o ator atual da requisição.
+
+    Hoje sempre retorna `system_actor()` porque ainda não temos autenticação.
+    Quando o Marco de Auth chegar, este helper passa a:
     1) ler `Authorization: Bearer ...` da requisição,
     2) validar o JWT,
     3) construir um `Actor` real com `actor_id` e `username` do token.

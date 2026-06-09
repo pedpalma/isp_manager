@@ -4,6 +4,7 @@
 # handler global em app/api/errors.py já as serializa no envelope padrão
 # `{"error":{code, message, details, request_id}}`. Quem chama (rotas)
 # não precisa saber montar a resposta.
+
 from __future__ import annotations
 
 from uuid import UUID
@@ -11,7 +12,8 @@ from uuid import UUID
 from app.core.exceptions import ConflictError, NotFoundError
 
 
-# Manufacturer
+# ----- Manufacturer -----
+
 class ManufacturerNotFound(NotFoundError):
     def __init__(self, manufacturer_id: UUID) -> None:
         super().__init__(
@@ -28,7 +30,8 @@ class ManufacturerSlugConflict(ConflictError):
         )
 
 
-# OLT Model
+# ----- OltModel -----
+
 class OltModelNotFound(NotFoundError):
     def __init__(self, olt_model_id: UUID) -> None:
         super().__init__(
@@ -48,7 +51,8 @@ class OltModelConflict(ConflictError):
         )
 
 
-# ONU Model
+# ----- OnuModel -----
+
 class OnuModelNotFound(NotFoundError):
     def __init__(self, onu_model_id: UUID) -> None:
         super().__init__(
@@ -68,10 +72,11 @@ class OnuModelConflict(ConflictError):
         )
 
 
-class OnuModelVendorConflict(ConflictError):
-    def __init__(self, manufacturer_id: UUID, vendor_id: UUID) -> None:
+class OnuModelVendorIdConflict(ConflictError):
+    def __init__(self, manufacturer_id: UUID, vendor_id: str) -> None:
         super().__init__(
-            f"Já existe um modelo de ONU com vendor_id '{vendor_id}' para este fabricante.",
+            f"Já existe um modelo de ONU com vendor_id '{vendor_id}' "
+            f"para este fabricante.",
             details={
                 "manufacturer_id": str(manufacturer_id),
                 "vendor_id": vendor_id,

@@ -1,5 +1,10 @@
 # Model ORM da tabela `manufacturer`.
-# Este model MAPEIA as colunas para que o SQLAlchemy possa fazer SELECT/INSERT/UPDATE.
+#
+# A tabela JÁ existe no banco (criada pela migration 0001_initial_schema do
+# Marco 4 com o DDL.sql). Este model apenas MAPEIA as colunas para que o
+# SQLAlchemy possa fazer SELECT/INSERT/UPDATE.
+#
+# Nenhuma migration nova é necessária para o Marco 9.
 
 from __future__ import annotations
 
@@ -26,13 +31,16 @@ class Manufacturer(Base, TimestampMixin):
         primary_key=True,
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
-
     # `unique=True` aqui só serve para o ORM "saber" da unicidade. A
     # restrição real já está no banco (uq_manufacturer_slug do DDL).
     slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # created_at e updated_at vem do mixin de timestamp
+    active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+    # created_at e updated_at vêm do TimestampMixin.
 
     def __repr__(self) -> str:
-        # Útil em logs/debug.
+        # Útil em logs/debug. Não inclui PII (não há aqui, mas fica o padrão).
         return f"<Manufacturer slug={self.slug!r} active={self.active}>"

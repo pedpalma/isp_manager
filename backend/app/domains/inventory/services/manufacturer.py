@@ -1,10 +1,15 @@
-# Service do Manufacturer e regras de negócio.
-# Responsabilidades:
-# - Validar invariantes do domínio (slug único, etc.).
-# - Traduzir IntegrityError em erros de domínio.
-# - Controlar os limites da transação: COMMIT em sucesso, ROLLBACK em falha. O repository não faz commit nunca.
-# - Logar eventos de negócio (manufacturer.created, .updated, .deactivated).
-# O service não sabe nada sobre HTTP. Quem traduz a exceção para resposta HTTP é o handler global em app/api/errors.py.
+# Service do Manufacturer.
+#
+# Onde mora a regra de negócio. Responsabilidades:
+#   - Validar invariantes do domínio (slug único, etc.).
+#   - Traduzir IntegrityError (linguagem do banco) em erros de domínio
+#     (linguagem do negócio).
+#   - Controlar os limites da transação: COMMIT em sucesso, ROLLBACK em
+#     falha. O repository não faz commit nunca.
+#   - Logar eventos de negócio (manufacturer.created, .updated, .deactivated).
+#
+# O service não sabe nada sobre HTTP. Quem traduz a exceção para resposta
+# HTTP é o handler global em app/api/errors.py.
 
 from __future__ import annotations
 
@@ -35,9 +40,10 @@ class ManufacturerService:
         self._session = session
         self._repo = ManufacturerRepository(session)
 
-    # Leitura
+    # ----- Leitura -----
+
     async def get(self, manufacturer_id: UUID, *, actor: Actor) -> Manufacturer:
-        del actor
+        del actor  # reservado para autorização futura por escopo
         m = await self._repo.get_by_id(manufacturer_id)
         if m is None:
             raise ManufacturerNotFound(manufacturer_id)
@@ -60,7 +66,8 @@ class ManufacturerService:
             search=search,
         )
 
-    # Escrita
+    # ----- Escrita -----
+
     async def create(self, data: ManufacturerCreate, *, actor: Actor) -> Manufacturer:
         # Pré-check: dá uma mensagem nítida no caso normal (slug duplicado).
         existing = await self._repo.get_by_slug(data.slug)
@@ -73,7 +80,8 @@ class ManufacturerService:
             await self._session.commit()
         except IntegrityError as exc:
             # Cobre a corrida: pré-check passou, mas outro request inseriu
-            # o mesmo slug entre o SELECT e o INSERT.
+            # o mesmo slug entre o SELECT e o INSERT. Tradução para erro
+            # de domínio mantém o contrato da API consistente.
             await self._session.rollback()
             raise ManufacturerSlugConflict(data.slug) from exc
 
@@ -95,7 +103,10 @@ class ManufacturerService:
         m = await self._repo.get_by_id(manufacturer_id)
         if m is None:
             raise ManufacturerNotFound(manufacturer_id)
-        # `model_dump(exclude_unset=True)`: pega só os campos que vieram no corpo do PATCH.
+
+        # `model_dump(exclude_unset=True)`: pega só os campos que vieram no
+        # corpo do PATCH. Pulamos os que o cliente não mandou; eles ficam
+        # como estão (semântica PATCH).
         payload = data.model_dump(exclude_unset=True)
 
         if "slug" in payload and payload["slug"] != m.slug:
@@ -111,7 +122,8 @@ class ManufacturerService:
             await self._session.commit()
         except IntegrityError as exc:
             await self._session.rollback()
-            # Se ainda assim o IntegrityError veio, é quase certo conflito de slug.
+            # Se ainda assim o IntegrityError veio, é quase certo conflito
+            # de slug (única constraint de unicidade da tabela).
             raise ManufacturerSlugConflict(payload.get("slug", m.slug)) from exc
 
         log.info(

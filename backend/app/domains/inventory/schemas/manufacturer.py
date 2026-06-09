@@ -1,9 +1,11 @@
 # Schemas Pydantic v2 do Manufacturer.
 #
 # Padrão Create/Update/Read:
-# - *Create*: usado no POST (corpo da requisição que cria um recurso).
-# - *Update*: usado no PATCH (todos os campos opcionais; só atualiza os presentes).
-# - *Read*: usado no response_model (o que sai para o cliente; inclui ids e timestamps gerenciados pelo banco).
+#   - *Create*: usado no POST (corpo da requisição que cria um recurso).
+#   - *Update*: usado no PATCH (todos os campos opcionais; só atualiza os
+#                 presentes).
+#   - *Read*:   usado no response_model (o que sai para o cliente; inclui
+#                 ids e timestamps gerenciados pelo banco).
 
 from __future__ import annotations
 
@@ -13,11 +15,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 # Regra de slug:
-# - lowercase,
-# - dígito ou letra no primeiro caractere,
-# - sem espaço (apenas letras, dígitos, `-` e `_`),
-# - até 64 caracteres
-
+#   - lowercase,
+#   - dígito ou letra no primeiro caractere,
+#   - sem espaço (apenas letras, dígitos, `-` e `_`),
+#   - até 64 caracteres.
+# Ex. válidos: "huawei", "zte", "fiberhome", "nokia", "tp-link", "v-sol_b".
 _SLUG_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,63}$"
 
 
@@ -28,7 +30,8 @@ class ManufacturerBase(BaseModel):
         max_length=64,
         pattern=_SLUG_PATTERN,
         description=(
-            "Apelido curto, lowercase, sem espaços. Usado em integrações e URLs internas."
+            "Apelido curto, lowercase, sem espaços. "
+            "Usado em integrações e URLs internas."
         ),
     )
     active: bool = Field(default=True, description="Se FALSE, fica oculto em listagens.")
@@ -38,8 +41,9 @@ class ManufacturerCreate(ManufacturerBase):
     """Corpo do POST /manufacturers."""
 
 
-class ManufacturerUpdate(ManufacturerBase):
+class ManufacturerUpdate(BaseModel):
     """Corpo do PATCH /manufacturers/{id}. Todos os campos opcionais.
+
     Só os campos PRESENTES no JSON são atualizados (semântica PATCH).
     """
 
