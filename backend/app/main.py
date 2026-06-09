@@ -9,7 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.errors import register_error_handlers
 from app.api.middleware.logging import LoggingMiddleware
 from app.api.middleware.request_id import RequestIDMiddleware
-from app.api.v1.routes import diagnostics, health
+from app.api.v1.routes import (
+    diagnostics,
+    health,
+    manufacturers,
+    olt_models,
+    onu_models,
+)
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine, init_engine
@@ -71,14 +77,17 @@ def create_app() -> FastAPI:
         max_age=600,
     )
 
-    # ----- Handlers globais de erro (resposta JSON padronizada) -----
+    # Handlers globais de erro
     register_error_handlers(app)
 
-    # ----- Rotas -----
+    # Rotas
     # Health fora do prefixo /api/v1 (contrato de infraestrutura).
     app.include_router(health.router)
-    # Diagnóstico sob o prefixo de versão.
+    # Sob /api/v1.
     app.include_router(diagnostics.router, prefix="/api/v1")
+    app.include_router(manufacturers.router, prefix="/api/v1")
+    app.include_router(olt_models.router, prefix="/api/v1")
+    app.include_router(onu_models.router, prefix="/api/v1")
 
     return app
 
