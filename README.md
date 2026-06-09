@@ -88,6 +88,6 @@ Todos os comandos disponíveis em `make help`. Os mais usados:
 
 ## Licença
 
-Uso interno. Versão comercial planejada em fork separado.
+Por enquanto, somente para uso interno. Versão comercial planejada em fork separado.
 
 ---
