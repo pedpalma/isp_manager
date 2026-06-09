@@ -41,9 +41,10 @@ Sistema OSS/BSS para provedor de internet (ISP), oferecendo descoberta, provisio
 Primeira execução:
 
 ```bash
-git clone <url-do-repo> isp_manager
+git clone https://github.com/pedpalma/isp_manager.git
 cd isp_manager
 make setup
+make rebuild
 make up
 make migrate
 ```
