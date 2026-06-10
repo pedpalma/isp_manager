@@ -195,7 +195,7 @@ def test_patch_rotates_secret_ref(real_client: TestClient) -> None:
     )
     assert patch.status_code == 200
     body = patch.json()
-    assert "secret_ref" not in body  # confirma D3 no Read do PATCH
+    assert "secret_ref" not in body
 
 
 def test_patch_switch_to_ssh_key_without_private_key_returns_409(

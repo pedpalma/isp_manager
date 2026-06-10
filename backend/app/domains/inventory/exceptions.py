@@ -1,9 +1,4 @@
 # Exceções específicas do domínio Inventory.
-#
-# Herdam de NotFoundError/ConflictError (app/core/exceptions.py), então o
-# handler global em app/api/errors.py já as serializa no envelope padrão
-# `{"error":{code, message, details, request_id}}`. Quem chama (rotas)
-# não precisa saber montar a resposta.
 
 from __future__ import annotations
 
@@ -84,12 +79,12 @@ class OnuModelVendorIdConflict(ConflictError):
 class CredentialNotFound(NotFoundError):
     def __init__(self, credential_id: UUID) -> None:
         super().__init__(
-            f"Credencial não encontrada: {credential_id}",
+            f"Credencial não encontrada: {credential_id}.",
             details={"credential_id": str(credential_id)},
         )
 
 
-class CredentialAuthMissmatch(ConflictError):
+class CredentialAuthMismatch(ConflictError):
     def __init__(self, credential_id: UUID, auth_type: str) -> None:
         super().__init__(
             ("Estado inconsistente: auth_type='ssh_key' exige private_key_ref preenchido."),

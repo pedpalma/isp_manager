@@ -58,8 +58,7 @@ class CredentialRepository:
 
         return items, total
 
-    # ----- Escrita -----
-
+    # Escrita
     async def add(self, credential: Credential) -> None:
         """Adiciona à sessão e força flush para popular o `credential_id`
         gerado pelo Postgres. NÃO commita."""
