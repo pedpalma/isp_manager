@@ -1,4 +1,4 @@
-# isp_manager
+<h1 align="center">ISP Manager</h1>
 
 Sistema OSS/BSS para provedor de internet (ISP), oferecendo descoberta, provisionamento e monitoramento de ONUs/ONTs em redes GPON.
 
@@ -16,13 +16,13 @@ Sistema OSS/BSS para provedor de internet (ISP), oferecendo descoberta, provisio
 
 ## Stack
 
-| Camada   | Tecnologia                                    |
-| -------- | --------------------------------------------- |
-| Backend  | Python 3.12, FastAPI, SQLAlchemy 2.0 (async)  |
-| Worker   | Celery + Redis                                |
-| Banco    | PostgreSQL 17                                 |
-| Frontend | Next.js 15 (App Router), TypeScript, Tailwind |
-| Infra    | Docker Compose, deploy em Proxmox             |
+| Camada   | Tecnologia                                                                                                                                                                                                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Backend  | ![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white) ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat&logo=sqlalchemy&logoColor=white)                    |
+| Worker   | ![Celery](https://img.shields.io/badge/Celery-37814A?style=flat&logo=celery&logoColor=white) ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat&logo=redis&logoColor=white)                                                                                                                                   |
+| Banco    | ![PostgreSQL17](https://img.shields.io/badge/PostgreSQL-336791?style=flat&logo=postgresql&logoColor=white)                                                                                                                                                                                                               |
+| Frontend | ![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat&logo=nextdotjs&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white) |
+| Infra    | ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white) ![Proxmox](https://img.shields.io/badge/Proxmox-E57000?style=flat&logo=proxmox&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)                                   |
 
 ---
 
