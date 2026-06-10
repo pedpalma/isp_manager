@@ -78,3 +78,23 @@ class OnuModelVendorIdConflict(ConflictError):
                 "vendor_id": vendor_id,
             },
         )
+
+
+# Credential
+class CredentialNotFound(NotFoundError):
+    def __init__(self, credential_id: UUID) -> None:
+        super().__init__(
+            f"Credencial não encontrada: {credential_id}",
+            details={"credential_id": str(credential_id)},
+        )
+
+
+class CredentialAuthMissmatch(ConflictError):
+    def __init__(self, credential_id: UUID, auth_type: str) -> None:
+        super().__init__(
+            ("Estado inconsistente: auth_type='ssh_key' exige private_key_ref preenchido."),
+            details={
+                "credential_id": str(credential_id),
+                "auth_type": auth_type,
+            },
+        )
