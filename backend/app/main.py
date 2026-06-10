@@ -10,6 +10,7 @@ from app.api.errors import register_error_handlers
 from app.api.middleware.logging import LoggingMiddleware
 from app.api.middleware.request_id import RequestIDMiddleware
 from app.api.v1.routes import (
+    credentials,
     diagnostics,
     health,
     manufacturers,
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(manufacturers.router, prefix="/api/v1")
     app.include_router(olt_models.router, prefix="/api/v1")
     app.include_router(onu_models.router, prefix="/api/v1")
+    app.include_router(credentials.router, prefix="/api/v1")
 
     return app
 
