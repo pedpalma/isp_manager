@@ -28,7 +28,6 @@ def _logging() -> None:
 def _build_app() -> FastAPI:
     app = FastAPI()
     # Mesma ordem do main.py real: logging primeiro, request_id depois
-    # (request_id vira o mais externo).
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(RequestIDMiddleware)
     register_error_handlers(app)
@@ -67,20 +66,6 @@ def client() -> TestClient:
     return TestClient(_build_app(), raise_server_exceptions=False)
 
 
-# ============================================================================
-# Marco 9: fixtures para testes que tocam o banco real.
-# ============================================================================
-#
-# - `real_client`: TestClient da aplicação REAL (create_app + lifespan).
-#   Faz init_engine no startup do TestClient; conecta no Postgres do compose.
-#   Session-scoped: o lifespan roda UMA vez para toda a suíte de testes.
-#
-# - `_inventory_cleanup_session_scope`: roda ANTES e DEPOIS da sessão,
-#   removendo registros com prefixo `pytest-`. Mantém o banco de dev limpo
-#   entre execuções. Se o banco estiver indisponível, é no-op (silencioso).
-#
-# Pré-requisito para os testes de integração: `docker compose up` rodando.
-
 PYTEST_PREFIX = "pytest-"
 
 
@@ -102,6 +87,10 @@ def _try_inventory_cleanup() -> None:
                 )
                 conn.execute(
                     text("DELETE FROM olt_model WHERE model LIKE :p"),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text("DELETE FROM credential WHERE label LIKE :p"),
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
                 conn.execute(
