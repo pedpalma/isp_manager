@@ -12,8 +12,7 @@ from uuid import UUID
 from app.core.exceptions import ConflictError, NotFoundError
 
 
-# ----- Manufacturer -----
-
+# Manufacturer
 class ManufacturerNotFound(NotFoundError):
     def __init__(self, manufacturer_id: UUID) -> None:
         super().__init__(
@@ -30,8 +29,7 @@ class ManufacturerSlugConflict(ConflictError):
         )
 
 
-# ----- OltModel -----
-
+# OltModel
 class OltModelNotFound(NotFoundError):
     def __init__(self, olt_model_id: UUID) -> None:
         super().__init__(
@@ -51,8 +49,7 @@ class OltModelConflict(ConflictError):
         )
 
 
-# ----- OnuModel -----
-
+# OnuModel
 class OnuModelNotFound(NotFoundError):
     def __init__(self, onu_model_id: UUID) -> None:
         super().__init__(
@@ -75,8 +72,7 @@ class OnuModelConflict(ConflictError):
 class OnuModelVendorIdConflict(ConflictError):
     def __init__(self, manufacturer_id: UUID, vendor_id: str) -> None:
         super().__init__(
-            f"Já existe um modelo de ONU com vendor_id '{vendor_id}' "
-            f"para este fabricante.",
+            f"Já existe um modelo de ONU com vendor_id '{vendor_id}' para este fabricante.",
             details={
                 "manufacturer_id": str(manufacturer_id),
                 "vendor_id": vendor_id,
