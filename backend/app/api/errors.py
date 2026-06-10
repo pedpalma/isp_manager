@@ -1,21 +1,21 @@
 # Handlers globais de exceção.
-#
+
 # Padroniza TODA resposta de erro no formato:
 #   {
 #     "error": {
 #       "code": "not_found",
 #       "message": "...",
 #       "details": {...} | null,
-#       "request_id": "..."        # correlaciona com os logs
+#       "request_id": "..."
 #     }
 #   }
-#
+
 # Cobre quatro casos:
-#   - AppException            -> erros de negócio (status/código vêm da exceção)
-#   - RequestValidationError  -> corpo/query inválidos (Pydantic/FastAPI) -> 422
-#   - HTTPException           -> HTTPException levantada manualmente
-#   - Exception               -> qualquer coisa não tratada -> 500 genérico
-#
+# - AppException -> erros de negócio (status/código vêm da exceção)
+# - RequestValidationError -> corpo/query inválidos (Pydantic/FastAPI) -> 422
+# - HTTPException -> HTTPException levantada manualmente
+# - Exception -> qualquer coisa não tratada -> 500 genérico
+
 # Em dev (settings.app.expose_internal_errors == True) o 500 expõe a mensagem
 # real; em prod, devolve texto genérico e o detalhe fica só no log.
 
@@ -58,6 +58,24 @@ def _response(status_code: int, body: dict[str, Any]) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=body)
 
 
+def _sanitize_validation_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Torna o output de `exc.errors()` do Pydantic v2 JSON-serializável."""
+    out: list[dict[str, Any]] = []
+    for err in errors:
+        new_err = dict(err)
+        ctx = new_err.get("ctx")
+        if isinstance(ctx, dict):
+            new_ctx: dict[str, Any] = {}
+            for k, v in ctx.items():
+                if isinstance(v, BaseException):
+                    new_ctx[k] = str(v)
+                else:
+                    new_ctx[k] = v
+            new_err["ctx"] = new_ctx
+        out.append(new_err)
+    return out
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Registra todos os handlers no app. Chamado em create_app()."""
 
@@ -83,8 +101,8 @@ def register_error_handlers(app: FastAPI) -> None:
             _error_body(
                 code="validation_error",
                 message="Falha de validação na requisição.",
-                # exc.errors() é serializável (list de dicts) e mostra qual campo falhou.
-                details=exc.errors(),
+                # `exc.errors()` pode conter objetos não-serializáveis em ctx
+                details=_sanitize_validation_errors(exc.errors()),
             ),
         )
 
