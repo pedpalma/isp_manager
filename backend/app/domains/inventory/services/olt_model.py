@@ -63,9 +63,7 @@ class OltModelService:
         if manufacturer is None:
             raise ManufacturerNotFound(data.manufacturer_id)
 
-        existing = await self._repo.get_by_manufacturer_and_model(
-            data.manufacturer_id, data.model
-        )
+        existing = await self._repo.get_by_manufacturer_and_model(data.manufacturer_id, data.model)
         if existing is not None:
             raise OltModelConflict(data.manufacturer_id, data.model)
 

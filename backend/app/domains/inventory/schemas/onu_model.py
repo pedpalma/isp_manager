@@ -34,8 +34,7 @@ class OnuModelBase(BaseModel):
     capabilities_json: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Capacidades em formato livre. Ex.: "
-            "`{\"wifi\": true, \"fxs\": 2, \"catv\": false}`."
+            'Capacidades em formato livre. Ex.: `{"wifi": true, "fxs": 2, "catv": false}`.'
         ),
     )
     active: bool = Field(default=True)

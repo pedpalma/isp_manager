@@ -35,7 +35,7 @@ celery_app.conf.update(
     task_track_started=True,
 )
 
-# Registra os sinais (correlação de request_id API↔worker + logging do worker).
+# Registra os sinais (correlação de request_id API <-> worker + logging do worker).
 # Import no fim, depois de celery_app existir, para evitar import circular.
 # Como API e worker importam este módulo, ambos passam a ter os sinais ligados.
 import app.core.celery_signals  # noqa: E402, F401

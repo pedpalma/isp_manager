@@ -30,8 +30,7 @@ class ManufacturerBase(BaseModel):
         max_length=64,
         pattern=_SLUG_PATTERN,
         description=(
-            "Apelido curto, lowercase, sem espaços. "
-            "Usado em integrações e URLs internas."
+            "Apelido curto, lowercase, sem espaços. Usado em integrações e URLs internas."
         ),
     )
     active: bool = Field(default=True, description="Se FALSE, fica oculto em listagens.")
