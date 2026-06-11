@@ -75,3 +75,15 @@ class ConfigurationError(AppException):
 
     status_code = 500
     error_code = "configuration_error"
+
+
+class BadRequestError(AppException):
+    """Requisição malformada em nível de negócio: referencia um recurso
+    que não existe ou que está em estado inutilizável para a operação.
+    Distingue-se do 422 do Pydantic (formato do payload) e do 409 de
+    conflito (colisão com estado existente). Ex.: olt_model_id ou
+    credential_id inexistente; credencial referenciada está inativa.
+    """
+
+    status_code = 400
+    error_code = "bad_request"
