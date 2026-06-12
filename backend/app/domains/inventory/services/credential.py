@@ -12,6 +12,7 @@ from app.core.logging import get_logger
 from app.domains.inventory.enums import AuthType
 from app.domains.inventory.exceptions import (
     CredentialAuthMismatch,
+    CredentialInUse,
     CredentialNotFound,
 )
 from app.domains.inventory.models.credential import Credential
@@ -112,6 +113,17 @@ class CredentialService:
                 credential_id=c.credential_id,
                 auth_type=final_auth_type.value,
             )
+
+        # Desativar uma credencial em uso por OLT viva é proibido.
+        # Checa ANTES de qualquer mutação, então não há nada para reverter quando bloqueia.
+        if payload.get("active") is False and c.active is True:
+            from app.domains.inventory.repositories.olt import (  # noqa: PLC0415
+                OltRepository,
+            )
+
+            olt_repo = OltRepository(self._session)
+            if await olt_repo.has_active_for_credential(c.credential_id):
+                raise CredentialInUse(c.credential_id)
 
         for field, value in payload.items():
             setattr(c, field, value)
