@@ -56,9 +56,7 @@ class OltRepository:
 
     async def has_active_for_credential(self, credential_id: UUID) -> bool:
         """True se existe ALGUMA OLT viva (deleted_at IS NULL) usando esta
-        credencial, independente do flag `active`. Suporta a regra herdada
-        do Marco 10: credencial em uso não pode ser desativada.
-        """
+        credencial, independente do flag `active`. Credencial em uso não pode ser desativada."""
         stmt = (
             select(func.count())
             .select_from(Olt)
@@ -81,8 +79,7 @@ class OltRepository:
         """Devolve (itens da página, total geral). Sempre exclui soft-deletadas.
 
         only_active: filtra adicionalmente pelo flag `active`.
-        search: case-insensitive em name OU hostname.
-        """
+        search: case-insensitive em name OU hostname."""
         base_filter = select(Olt).where(Olt.deleted_at.is_(None))
         count_query = select(func.count()).select_from(Olt).where(Olt.deleted_at.is_(None))
 
