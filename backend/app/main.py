@@ -15,6 +15,7 @@ from app.api.v1.routes import (
     health,
     manufacturers,
     olt_models,
+    olts,
     onu_models,
 )
 from app.core.config import settings
@@ -57,11 +58,9 @@ def create_app() -> FastAPI:
     # ORDEM IMPORTA. No Starlette, o ÚLTIMO add_middleware é o mais EXTERNO.
     # Fluxo de entrada de uma requisição: CORS -> RequestID -> Logging -> rota.
 
-    # 1) LoggingMiddleware (mais interno): loga já com o request_id no contexto.
+    # 1) LoggingMiddleware: loga já com o request_id no contexto.
     # 2) RequestIDMiddleware: amarra/propaga o request_id antes do logging.
-    # 3) CORSMiddleware (mais externo): responde o preflight OPTIONS antes
-    # de gerar request_id/log (menos ruído) e embrulha TODAS as respostas,
-    # inclusive as de erro, com os cabeçalhos CORS.
+    # 3) CORSMiddleware: responde o preflight OPTIONS antes de gerar request_id/log e embrulha TODAS as respostas.
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(
@@ -90,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(olt_models.router, prefix="/api/v1")
     app.include_router(onu_models.router, prefix="/api/v1")
     app.include_router(credentials.router, prefix="/api/v1")
+    app.include_router(olts.router, prefix="/api/v1")
 
     return app
 
