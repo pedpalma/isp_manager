@@ -63,7 +63,7 @@ def _create_olt_model(client, manufacturer_id: str) -> str:
         "manufacturer_id": manufacturer_id,
         "model": f"pytest-model-{_suffix()}",
     }
-    r = client.post(f"{API}/olt_models", json=payload)
+    r = client.post(f"{API}/olt-models", json=payload)
     assert r.status_code == 201, f"setup olt_model falhou: {r.status_code} {r.text}"
     return r.json()["olt_model_id"]
 
