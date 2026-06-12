@@ -86,6 +86,10 @@ def _try_inventory_cleanup() -> None:
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
                 conn.execute(
+                    text("DELETE FROM olt WHERE name LIKE :p"),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
                     text("DELETE FROM olt_model WHERE model LIKE :p"),
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
