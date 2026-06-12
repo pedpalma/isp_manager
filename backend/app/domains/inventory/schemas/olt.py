@@ -1,6 +1,5 @@
 # Schemas Pydantic v2 da OLT.
 
-# Decisões refletidas aqui:
 # - Separação de campos entre Create / Update / Read.
 #   * olt_model_id: só Create (imutável). Não existe no Update.
 #   * credential_id: Create e Update (mutável).
@@ -86,7 +85,7 @@ class OltBase(BaseModel):
         default="UTC",
         description="Timezone IANA. Default 'UTC'.",
     )
-    polling_enable: bool = Field(
+    polling_enabled: bool = Field(
         default=True,
         description="Se a Coleta deve buscar dados desta OLT.",
     )
