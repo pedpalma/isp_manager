@@ -82,8 +82,8 @@ class OltBase(BaseModel):
         description="Localização física, opcional.",
     )
     timezone: str = Field(
-        default="UTC",
-        description="Timezone IANA. Default 'UTC'.",
+        default="America/Sao_Paulo",
+        description="Timezone IANA. Default 'America/Sao_Paulo' (espelha o DDL).",
     )
     polling_enabled: bool = Field(
         default=True,

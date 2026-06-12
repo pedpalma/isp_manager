@@ -28,7 +28,7 @@ def test_create_applies_defaults():
     olt = OltCreate(**_valid_create_payload())
     assert olt.management_port == 22
     assert olt.access_protocol is AccessProtocol.SSH
-    assert olt.timezone == "UTC"
+    assert olt.timezone == "America/Sao_Paulo"
     assert olt.polling_enabled is True
     assert olt.active is True
     assert olt.hostname is None
@@ -85,7 +85,7 @@ def test_timezone_rejects_non_iana(tz):
 
 
 # access_protocol
-@pytest.mark.parametrize("proto", ["ssh", "telnet", "snmp"])
+@pytest.mark.parametrize("proto", ["SSH", "TELNET", "SNMP"])
 def test_access_protocol_accepts_enum_values(proto):
     olt = OltCreate(**{**_valid_create_payload(), "access_protocol": proto})
     assert olt.access_protocol.value == proto

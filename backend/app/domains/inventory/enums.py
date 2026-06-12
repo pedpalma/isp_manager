@@ -26,9 +26,9 @@ class AccessProtocol(str, Enum):  # noqa: UP042
     - SNMP: acesso por SNMP (porta padrão 161).
     """
 
-    SSH = "ssh"
-    TELNET = "telnet"
-    SNMP = "snmp"
+    SSH = "SSH"
+    TELNET = "TELNET"
+    SNMP = "SNMP"
 
 
 class ConnectionStatus(str, Enum):  # noqa: UP042

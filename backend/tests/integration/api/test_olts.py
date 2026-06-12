@@ -116,12 +116,12 @@ def test_create_olt_returns_201_with_defaults(real_client, prereqs):
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["connection_status"] == "unknown"  # server_default via RETURNING
-    assert body["access_protocol"] == "ssh"
-    assert body["timezone"] == "UTC"
+    assert body["access_protocol"] == "SSH"
+    assert body["timezone"] == "America/Sao_Paulo"
     assert body["polling_enabled"] is True
     assert body["active"] is True
     assert "olt_id" in body
-    assert "deleted_at" not in body  # D11.2
+    assert "deleted_at" not in body
 
 
 def test_get_olt_detail(real_client, prereqs):

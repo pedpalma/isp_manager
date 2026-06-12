@@ -1,5 +1,6 @@
 # Model ORM da tabela `olt`.
 
+
 # Unicidades parciais (WHERE deleted_at IS NULL) vivem no DDL, não aqui:
 # - uq_olt_name_active -> (name) com deleted_at IS NULL
 # - uq_olt_ip_port_active -> (ip, management_port) com deleted_at IS NULL
@@ -67,7 +68,7 @@ class Olt(Base, TimestampMixin, SoftDeleteMixin):
     timezone: Mapped[str] = mapped_column(
         Text,
         nullable=False,
-        default="UTC",
+        default="America/Sao_Paulo",
     )
 
     polling_enabled: Mapped[bool] = mapped_column(
