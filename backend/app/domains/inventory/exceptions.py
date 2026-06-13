@@ -159,3 +159,125 @@ class CredentialInactive(BadRequestError):
             f"credential_id inválido: a credencial está inativa ({credential_id}).",
             details={"credential_id": str(credential_id)},
         )
+
+
+# Chassis (Marco 12)
+class ChassisNotFound(NotFoundError):
+    def __init__(self, chassis_id: UUID) -> None:
+        super().__init__(
+            f"Chassis não encontrado: {chassis_id}.",
+            details={"chassis_id": str(chassis_id)},
+        )
+
+
+class ChassisConflict(ConflictError):
+    """Unicidade (olt_id, chassis_index) violada."""
+
+    def __init__(self, olt_id: UUID, chassis_index: int) -> None:
+        super().__init__(
+            f"Já existe um chassis com índice {chassis_index} para esta OLT.",
+            details={
+                "olt_id": str(olt_id),
+                "chassis_index": chassis_index,
+            },
+        )
+
+
+class OltReferenceInvalid(BadRequestError):
+    """olt_id informado não existe ou está soft-deleted."""
+
+    def __init__(self, olt_id: UUID) -> None:
+        super().__init__(
+            f"olt_id inválido: OLT não encontrada ou inativada ({olt_id}).",
+            details={"olt_id": str(olt_id)},
+        )
+
+
+# Slot (Marco 12)
+class SlotNotFound(NotFoundError):
+    def __init__(self, slot_id: UUID) -> None:
+        super().__init__(
+            f"Slot não encontrado: {slot_id}.",
+            details={"slot_id": str(slot_id)},
+        )
+
+
+class SlotConflict(ConflictError):
+    """Unicidade (chassis_id, slot_index) violada."""
+
+    def __init__(self, chassis_id: UUID, slot_index: int) -> None:
+        super().__init__(
+            f"Já existe um slot com índice {slot_index} para este chassis.",
+            details={
+                "chassis_id": str(chassis_id),
+                "slot_index": slot_index,
+            },
+        )
+
+
+class ChassisReferenceInvalid(BadRequestError):
+    """chassis_id informado não existe ou pertence a OLT soft-deleted."""
+
+    def __init__(self, chassis_id: UUID) -> None:
+        super().__init__(
+            f"chassis_id inválido: chassis não encontrado ou OLT pai inativada ({chassis_id}).",
+            details={"chassis_id": str(chassis_id)},
+        )
+
+
+class SlotStatusInvalid(BadRequestError):
+    """Tentativa de setar status fora do conjunto admissível pela aplicação."""
+
+    def __init__(self, requested: str, allowed: list[str]) -> None:
+        super().__init__(
+            (
+                f"status='{requested}' não pode ser definido manualmente. "
+                f"Valores aceitos pela aplicação: {allowed}."
+            ),
+            details={"requested": requested, "allowed": allowed},
+        )
+
+
+# PonPort (Marco 12)
+class PonPortNotFound(NotFoundError):
+    def __init__(self, pon_port_id: UUID) -> None:
+        super().__init__(
+            f"Porta PON não encontrada: {pon_port_id}.",
+            details={"pon_port_id": str(pon_port_id)},
+        )
+
+
+class PonPortConflict(ConflictError):
+    """Unicidade (slot_id, pon_index) violada."""
+
+    def __init__(self, slot_id: UUID, pon_index: int) -> None:
+        super().__init__(
+            f"Já existe uma porta PON com índice {pon_index} para este slot.",
+            details={
+                "slot_id": str(slot_id),
+                "pon_index": pon_index,
+            },
+        )
+
+
+class SlotReferenceInvalid(BadRequestError):
+    """slot_id informado não existe ou pertence a OLT soft-deleted."""
+
+    def __init__(self, slot_id: UUID) -> None:
+        super().__init__(
+            f"slot_id inválido: slot não encontrado ou OLT pai inativada ({slot_id}).",
+            details={"slot_id": str(slot_id)},
+        )
+
+
+class PonPortStatusInvalid(BadRequestError):
+    """Tentativa de setar status fora do conjunto admissível pela aplicação."""
+
+    def __init__(self, requested: str, allowed: list[str]) -> None:
+        super().__init__(
+            (
+                f"status='{requested}' não pode ser definido manualmente. "
+                f"Valores aceitos pela aplicação: {allowed}."
+            ),
+            details={"requested": requested, "allowed": allowed},
+        )
