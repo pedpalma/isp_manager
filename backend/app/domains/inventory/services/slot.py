@@ -63,7 +63,7 @@ class SlotService:
             items=[SlotRead.model_validate(s) for s in items],
             total=total,
             page=params.page,
-            size=params.size,
+            page_size=params.page_size,
         )
 
     async def create(self, payload: SlotCreate, *, actor: Actor) -> SlotRead:

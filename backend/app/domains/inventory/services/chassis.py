@@ -56,7 +56,7 @@ class ChassisService:
             items=[ChassisRead.model_validate(c) for c in items],
             total=total,
             page=params.page,
-            size=params.size,
+            page_size=params.page_size,
         )
 
     async def create(self, payload: ChassisCreate, *, actor: Actor) -> ChassisRead:

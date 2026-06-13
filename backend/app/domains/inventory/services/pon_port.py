@@ -66,7 +66,7 @@ class PonPortService:
             items=[PonPortRead.model_validate(p) for p in items],
             total=total,
             page=params.page,
-            size=params.size,
+            page_size=params.page_size,
         )
 
     async def create(self, payload: PonPortCreate, *, actor: Actor) -> PonPortRead:
