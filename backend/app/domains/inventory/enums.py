@@ -69,7 +69,7 @@ class PortStatus(str, Enum):  # noqa: UP042
     FAULTY = "faulty"
 
 
-# Conjunto de status admissíveis para mutação manual via PATCH (D12.2).
+# Conjunto de status admissíveis para mutação manual via PATCH.
 ADMIN_MUTABLE_PORT_STATUS: frozenset[PortStatus] = frozenset(
     {PortStatus.DISABLED, PortStatus.UNKNOWN}
 )
