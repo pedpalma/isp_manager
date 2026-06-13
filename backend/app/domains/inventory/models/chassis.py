@@ -18,7 +18,7 @@ from app.db.base import Base
 from app.db.mixins import TimestampMixin
 
 
-class chassis(Base, TimestampMixin):
+class Chassis(Base, TimestampMixin):
     """Chassis de uma OLT. Sem `deleted_at` no DDL: ciclo via DELETE não exposto.
     Em runtime, considera-se 'vivo' se a OLT pai está viva."""
 
