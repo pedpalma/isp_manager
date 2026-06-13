@@ -80,7 +80,46 @@ def _try_inventory_cleanup() -> None:
         engine = create_engine(_settings.database.build_app_sync_url())
         try:
             with engine.connect() as conn, conn.begin():
-                # Ordem importa: filhos antes de pais por causa das FKs.
+                # Topologia: cascateia pelo nome da OLT pai.
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM pon_port WHERE slot_id IN (
+                            SELECT s.slot_id
+                            FROM slot s
+                            JOIN chassis c ON c.chassis_id = s.chassis_id
+                            JOIN olt o ON o.olt_id = c.olt_id
+                            WHERE o.name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM slot WHERE chassis_id IN (
+                            SELECT c.chassis_id
+                            FROM chassis c
+                            JOIN olt o ON o.olt_id = c.olt_id
+                            WHERE o.name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM chassis WHERE olt_id IN (
+                            SELECT olt_id FROM olt WHERE name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+
+                # Catálogo / inventário direto (mesmo padrão dos marcos anteriores).
                 conn.execute(
                     text("DELETE FROM onu_model WHERE model LIKE :p"),
                     {"p": f"{PYTEST_PREFIX}%"},
@@ -104,7 +143,6 @@ def _try_inventory_cleanup() -> None:
         finally:
             engine.dispose()
     except Exception:
-        # Cleanup nunca deve quebrar a saída do pytest.
         return
 
 
