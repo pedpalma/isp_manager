@@ -10,6 +10,7 @@ from app.api.errors import register_error_handlers
 from app.api.middleware.logging import LoggingMiddleware
 from app.api.middleware.request_id import RequestIDMiddleware
 from app.api.v1.routes import (
+    chassis,
     credentials,
     diagnostics,
     health,
@@ -17,6 +18,9 @@ from app.api.v1.routes import (
     olt_models,
     olts,
     onu_models,
+    pon_ports,
+    slots,
+    topology,
 )
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
@@ -90,6 +94,10 @@ def create_app() -> FastAPI:
     app.include_router(onu_models.router, prefix="/api/v1")
     app.include_router(credentials.router, prefix="/api/v1")
     app.include_router(olts.router, prefix="/api/v1")
+    app.include_router(chassis.router, prefix="/api/v1")
+    app.include_router(slots.router, prefix="/api/v1")
+    app.include_router(pon_ports.router, prefix="/api/v1")
+    app.include_router(topology.router, prefix="/api/v1")
 
     return app
 
