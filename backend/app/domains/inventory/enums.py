@@ -50,3 +50,37 @@ class ConnectionStatus(str, Enum):  # noqa: UP042
     DEGRADED = "degraded"
     AUTH_FAILED = "auth_failed"
     TIMEOUT = "timeout"
+
+
+class PortStatus(str, Enum):  # noqa: UP042
+    """Estado operacional/administrativo de slot e pon_port.
+    Espelha o tipo nativo `port_status_enum` do Postgres (DDL.sql).
+
+    A aplicação só pode setar 'disabled' e 'unknown' via PATCH.
+    Os demais valores ('up', 'down', 'loopback', 'faulty') são exclusivos
+    da Coleta; o service rejeita tentativa de mutação direta neles.
+    """
+
+    UNKNOWN = "unknown"
+    UP = "up"
+    DOWN = "down"
+    DISABLED = "disabled"
+    LOOPBACK = "loopback"
+    FAULTY = "faulty"
+
+
+# Conjunto de status admissíveis para mutação manual via PATCH (D12.2).
+ADMIN_MUTABLE_PORT_STATUS: frozenset[PortStatus] = frozenset(
+    {PortStatus.DISABLED, PortStatus.UNKNOWN}
+)
+
+
+# NOTA: o rótulo 'XGSPON' foi renomeado para 'XG-PON' pela migration 0002.
+# O DDL.sql da raiz deve refletir essa mudança após aplicar a 0002.
+class PonType(str, Enum):  # noqa: UP042
+    """Tecnologia PON da porta. Espelha `pon_type_enum` do Postgres."""
+
+    GPON = "GPON"
+    EPON = "EPON"
+    XGS_PON = "XGS-PON"
+    XG_PON = "XG-PON"
