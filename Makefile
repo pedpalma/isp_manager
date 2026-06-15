@@ -378,3 +378,8 @@ info: ## Mostra informações úteis do ambiente
 .PHONY: version
 version: ## Mostra versão da aplicação
 	@$(COMPOSE) exec $(SERVICE_API) python -c "from app.core.config import settings; print(settings.app.app_version)" 2>/dev/null || echo "API não está rodando"
+
+.PHONY: clean-pycache
+clean-pycache:
+	@echo "Limpando cache Python..."
+	@find . -type d -name "__pycache__" -exec rm -rf {} \;
