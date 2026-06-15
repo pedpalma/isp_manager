@@ -193,7 +193,7 @@ class OltReferenceInvalid(BadRequestError):
         )
 
 
-# Slot (Marco 12)
+# Slot
 class SlotNotFound(NotFoundError):
     def __init__(self, slot_id: UUID) -> None:
         super().__init__(
@@ -238,7 +238,7 @@ class SlotStatusInvalid(BadRequestError):
         )
 
 
-# PonPort (Marco 12)
+# PonPort
 class PonPortNotFound(NotFoundError):
     def __init__(self, pon_port_id: UUID) -> None:
         super().__init__(
@@ -280,4 +280,61 @@ class PonPortStatusInvalid(BadRequestError):
                 f"Valores aceitos pela aplicação: {allowed}."
             ),
             details={"requested": requested, "allowed": allowed},
+        )
+
+
+# Vlan
+class VlanNotFound(NotFoundError):
+    def __init__(self, vlan_id: UUID) -> None:
+        super().__init__(
+            f"VLAN nao encontrada: {vlan_id}.",
+            details={"vlan_id": str(vlan_id)},
+        )
+
+
+class VlanConflict(ConflictError):
+    """Unicidade (olt_id, vlan_number) violada. TOTAL: desativar nao libera o numero."""
+
+    def __init__(self, olt_id: UUID, vlan_number: int) -> None:
+        super().__init__(
+            f"Ja existe a VLAN {vlan_number} nesta OLT.",
+            details={"olt_id": str(olt_id), "vlan_number": vlan_number},
+        )
+
+
+# LineProfile
+class LineProfileNotFound(NotFoundError):
+    def __init__(self, line_profile_id: UUID) -> None:
+        super().__init__(
+            f"Perfil de linha nao encontrado: {line_profile_id}.",
+            details={"line_profile_id": str(line_profile_id)},
+        )
+
+
+class LineProfileConflict(ConflictError):
+    """Unicidade (olt_id, name, version) violada."""
+
+    def __init__(self, olt_id: UUID, name: str, version: str) -> None:
+        super().__init__(
+            f"Ja existe o perfil de linha '{name}' versao '{version}' nesta OLT.",
+            details={"olt_id": str(olt_id), "name": name, "version": version},
+        )
+
+
+# ServiceProfile
+class ServiceProfileNotFound(NotFoundError):
+    def __init__(self, service_profile_id: UUID) -> None:
+        super().__init__(
+            f"Perfil de servico nao encontrado: {service_profile_id}.",
+            details={"service_profile_id": str(service_profile_id)},
+        )
+
+
+class ServiceProfileConflict(ConflictError):
+    """Unicidade (olt_id, name, version) violada."""
+
+    def __init__(self, olt_id: UUID, name: str, version: str) -> None:
+        super().__init__(
+            f"Ja existe o perfil de servico '{name}' versao '{version}' nesta OLT.",
+            details={"olt_id": str(olt_id), "name": name, "version": version},
         )
