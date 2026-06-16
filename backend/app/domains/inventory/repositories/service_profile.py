@@ -46,7 +46,11 @@ class ServiceProfileRepository:
         return result.scalar_one_or_none()
 
     async def list_for_olt(
-        self, olt_id: UUID, *, offset: int = 0, limit: int = 200
+        self,
+        olt_id: UUID,
+        *,
+        offset: int = 0,
+        limit: int = 200,
     ) -> tuple[Sequence[ServiceProfile], int]:
         base = (
             select(ServiceProfile)
