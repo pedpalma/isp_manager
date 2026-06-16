@@ -1,5 +1,6 @@
 # Entrypoint da aplicação FastAPI.
 
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -14,13 +15,16 @@ from app.api.v1.routes import (
     credentials,
     diagnostics,
     health,
+    line_profiles,
     manufacturers,
     olt_models,
     olts,
     onu_models,
     pon_ports,
+    service_profiles,
     slots,
     topology,
+    vlans,
 )
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
@@ -98,6 +102,9 @@ def create_app() -> FastAPI:
     app.include_router(slots.router, prefix="/api/v1")
     app.include_router(pon_ports.router, prefix="/api/v1")
     app.include_router(topology.router, prefix="/api/v1")
+    app.include_router(vlans.router, prefix="/api/v1")
+    app.include_router(line_profiles.router, prefix="/api/v1")
+    app.include_router(service_profiles.router, prefix="/api/v1")
 
     return app
 
