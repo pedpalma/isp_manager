@@ -17,11 +17,14 @@ class LineProfileRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_by_id(self, line_profile_id: LineProfile) -> LineProfile | None:
+    async def get_by_id(self, line_profile_id: UUID) -> LineProfile | None:
         stmt = (
             select(LineProfile)
             .join(Olt, LineProfile.olt_id == Olt.olt_id)
-            .where(LineProfile.line_profile_id == line_profile_id, Olt.deleted_at.is_(None))
+            .where(
+                LineProfile.line_profile_id == line_profile_id,
+                Olt.deleted_at.is_(None),
+            )
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
@@ -62,7 +65,9 @@ class LineProfileRepository:
             .where(LineProfile.olt_id == olt_id, Olt.deleted_at.is_(None))
         )
         items_stmt = (
-            base.order_by(LineProfile.name, LineProfile.version).offset(offset).limit(limit)
+            base.order_by(LineProfile.name, LineProfile.version)
+            .offset(offset)
+            .limit(limit)
         )
         items_result = await self._session.execute(items_stmt)
         items: Sequence[LineProfile] = items_result.scalars().all()
