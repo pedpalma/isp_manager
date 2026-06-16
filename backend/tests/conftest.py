@@ -1,5 +1,3 @@
-# Configuração compartilhada dos testes.
-
 import os
 
 os.environ.setdefault("ISP_APP_DB_PASSWORD", "test-app-pass")
@@ -112,6 +110,38 @@ def _try_inventory_cleanup() -> None:
                     text(
                         """
                         DELETE FROM chassis WHERE olt_id IN (
+                            SELECT olt_id FROM olt WHERE name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+
+                # Perfis e VLANs: filhas de olt, cascateiam pelo nome da OLT pai (mesmo padrão da topologia).
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM vlan WHERE olt_id IN (
+                            SELECT olt_id FROM olt WHERE name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM line_profile WHERE olt_id IN (
+                            SELECT olt_id FROM olt WHERE name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM service_profile WHERE olt_id IN (
                             SELECT olt_id FROM olt WHERE name LIKE :p
                         )
                         """
