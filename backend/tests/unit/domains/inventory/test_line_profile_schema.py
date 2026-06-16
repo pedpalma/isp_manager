@@ -27,9 +27,10 @@ class TestLineProfileCreate:
     def test_requires_both_bandwidths(self) -> None:
         with pytest.raises(ValidationError):
             LineProfileCreate(
-                olt_id=uuid4(), name="x", upstream_bandwidth="1G",
-                downstream_bandwidth=None,
-            )
+                olt_id=uuid4(),
+                name="x",
+                upstream_bandwidth="1G",
+            )  # type: ignore
 
     def test_raw_config_accepts_dict(self) -> None:
         p = LineProfileCreate(
