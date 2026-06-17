@@ -7,11 +7,10 @@ from enum import Enum
 
 class AuthType(str, Enum):  # noqa: UP042
     """Tipo de autenticação de uma credencial de acesso a equipamento.
-    Espelha o tipo nativo `auth_type_enum` do Postgres (DDL.sql).
+        Espelha o tipo nativo `auth_type_enum` do Postgres (DDL.sql).
     - PASSWORD: usuário + senha. `secret_ref` aponta para a senha no cofre.
     - SSH_KEY: usuário + chave privada. `private_key_ref` aponta para a chave; `secret_ref` aponta para a passphrase.
-    - CERTIFICATE: autenticação por certificado.
-    """
+    - CERTIFICATE: autenticação por certificado."""
 
     PASSWORD = "password"
     SSH_KEY = "ssh_key"
@@ -50,6 +49,26 @@ class ConnectionStatus(str, Enum):  # noqa: UP042
     DEGRADED = "degraded"
     AUTH_FAILED = "auth_failed"
     TIMEOUT = "timeout"
+
+
+class SyncStatus(str, Enum):  # noqa: UP042
+    """Estado de sincronização do estado operacional da ONU.
+    Espelha o tipo nativo `sync_status_enum` do Postgres.
+    A aplicação NÃO envia este campo: o DEFAULT do banco ('pending') assume e a
+    Coleta atualiza depois. Usado em `onu_runtime_state.sync_status` (e também,
+    no marco de integração, em `sync_state`).
+    - PENDING: ainda não sincronizado (estado inicial).
+    - SYNCED: sincronizado com sucesso.
+    - FAILED: falha na última sincronização.
+    - CONFLICT: divergência detectada entre fontes.
+    - DISABLED: sincronização desabilitada para este registro.
+    """
+
+    PENDING = "pending"
+    SYNCED = "synced"
+    FAILED = "failed"
+    CONFLICT = "conflict"
+    DISABLED = "disabled"
 
 
 class PortStatus(str, Enum):  # noqa: UP042
