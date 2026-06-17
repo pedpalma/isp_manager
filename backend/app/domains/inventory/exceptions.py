@@ -161,7 +161,7 @@ class CredentialInactive(BadRequestError):
         )
 
 
-# Chassis (Marco 12)
+# Chassis
 class ChassisNotFound(NotFoundError):
     def __init__(self, chassis_id: UUID) -> None:
         super().__init__(
@@ -316,7 +316,7 @@ class LineProfileConflict(ConflictError):
 
     def __init__(self, olt_id: UUID, name: str, version: str) -> None:
         super().__init__(
-            f"Ja existe o perfil de linha '{name}' versao '{version}' nesta OLT.",
+            f"Ja existe o perfil de linha '{name}' versão '{version}' nesta OLT.",
             details={"olt_id": str(olt_id), "name": name, "version": version},
         )
 
@@ -325,7 +325,7 @@ class LineProfileConflict(ConflictError):
 class ServiceProfileNotFound(NotFoundError):
     def __init__(self, service_profile_id: UUID) -> None:
         super().__init__(
-            f"Perfil de servico nao encontrado: {service_profile_id}.",
+            f"Perfil de serviço nao encontrado: {service_profile_id}.",
             details={"service_profile_id": str(service_profile_id)},
         )
 
@@ -335,6 +335,60 @@ class ServiceProfileConflict(ConflictError):
 
     def __init__(self, olt_id: UUID, name: str, version: str) -> None:
         super().__init__(
-            f"Ja existe o perfil de servico '{name}' versao '{version}' nesta OLT.",
+            f"Ja existe o perfil de serviço '{name}' versão '{version}' nesta OLT.",
             details={"olt_id": str(olt_id), "name": name, "version": version},
+        )
+
+
+# ONU
+class OnuNotFound(NotFoundError):
+    def __init__(self, onu_id: UUID) -> None:
+        super().__init__(
+            f"ONU nâo encontrada: {onu_id}.",
+            details={"onu_id": str(onu_id)},
+        )
+
+
+class OnuSerialConflict(ConflictError):
+    """Unicidade parcial uq_onu_serial_active violada. PARCIAL: soft delete libera o serial.
+    Por isso o conflito só considera ONUs vivas."""
+
+    def __init__(self, serial: str) -> None:
+        super().__init__(
+            f"Já existe uma ONU ativa com o serial '{serial}'.",
+            details={"serial": serial},
+        )
+
+
+class OnuIndexConflict(ConflictError):
+    """Unicidade parcial uq_onu_index_per_pon_active violada: (pon_port_id, onu_index)
+    com onu_index NOT NULL entre ONUs vivas."""
+
+    def __init__(self, pon_port_id: UUID, onu_index: int) -> None:
+        super().__init__(
+            f"Já existe uma ONU ativa com índice {onu_index} nesta PON.",
+            details={"pon_port_id": str(pon_port_id), "onu_index": onu_index},
+        )
+
+
+class OnuModelReferenceInvalid(BadRequestError):
+    """onu_model_id informado não existe. 400 (referência inválida), não 404,
+    porque a ONU em si não foi solicitada: o pedido de criação está malformado.
+    (Distinta de OltModelReferenceInvalid, que é o modelo da OLT)"""
+
+    def __init__(self, onu_model_id: UUID) -> None:
+        super().__init__(
+            f"onu_model_id inválido: modelo de ONU não encontrado ({onu_model_id}).",
+            details={"onu_model_id": str(onu_model_id)},
+        )
+
+
+class PonPortReferenceInvalid(BadRequestError):
+    """pon_port_id informado não existe ou pertence a OLT soft-deletada. 400.
+    (Distinta de SlotReferenceInvalid, que é o pai do pon_port. Esta é o pai da ONU.)"""
+
+    def __init__(self, pon_port_id: UUID) -> None:
+        super().__init__(
+            f"pon_port_id inválido: porta PON não encontrada ou OLT pai inativada ({pon_port_id}).",
+            details={"pon_port_id": str(pon_port_id)},
         )
