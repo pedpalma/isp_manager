@@ -78,6 +78,41 @@ def _try_inventory_cleanup() -> None:
         engine = create_engine(_settings.database.build_app_sync_url())
         try:
             with engine.connect() as conn, conn.begin():
+                # ONU: deletar ANTES de pon_port e onu_model,
+                # que a ONU referencia. onu_runtime_state cascateia no hard
+                # delete da ONU, mas removemos explicitamente por clareza.
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM onu_runtime_state WHERE onu_id IN (
+                            SELECT o.onu_id
+                            FROM onu o
+                            JOIN pon_port pp ON pp.pon_port_id = o.pon_port_id
+                            JOIN slot s ON s.slot_id = pp.slot_id
+                            JOIN chassis c ON c.chassis_id = s.chassis_id
+                            JOIN olt ol ON ol.olt_id = c.olt_id
+                            WHERE ol.name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM onu WHERE pon_port_id IN (
+                            SELECT pp.pon_port_id
+                            FROM pon_port pp
+                            JOIN slot s ON s.slot_id = pp.slot_id
+                            JOIN chassis c ON c.chassis_id = s.chassis_id
+                            JOIN olt ol ON ol.olt_id = c.olt_id
+                            WHERE ol.name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+
                 # Topologia: cascateia pelo nome da OLT pai.
                 conn.execute(
                     text(
