@@ -20,6 +20,7 @@ from app.api.v1.routes import (
     olt_models,
     olts,
     onu_models,
+    onus,
     pon_ports,
     service_profiles,
     slots,
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(vlans.router, prefix="/api/v1")
     app.include_router(line_profiles.router, prefix="/api/v1")
     app.include_router(service_profiles.router, prefix="/api/v1")
+    app.include_router(onus.router, prefix="/api/v1")
 
     return app
 
