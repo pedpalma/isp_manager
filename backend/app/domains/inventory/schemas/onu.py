@@ -39,7 +39,7 @@ class OnuCreate(BaseModel):
         description="Porta PON onde a ONU está instalada. Precisa existir e a OLT pai estar viva."
     )
     serial: str = Field(
-        min_length=_SERIAL_MAX,
+        min_length=_SERIAL_MIN,
         max_length=_SERIAL_MAX,
         description="Número de série do aparelho. Único apenas entre ONUs vivas.",
     )
@@ -62,19 +62,20 @@ class OnuCreate(BaseModel):
         # como serial válido só por causa dos espaços.
         return v.strip() if isinstance(v, str) else v
 
-    class OnuUpdate(BaseModel):
-        # Fora daqui (imutáveis): onu_model_id, pon_port_id, serial.
-        onu_index: int | None = Field(
-            default=None,
-            ge=_ONU_INDEX_MIN,
-            le=_ONU_INDEX_MAX,
-            description="Novo índice na PON. Enviar null limpa o índice.",
-        )
-        description: str | None = Field(
-            default=None,
-            max_length=_DESCRIPTION_MAX,
-            description="Nova descrição. Enviar null limpa.",
-        )
+
+class OnuUpdate(BaseModel):
+    # Fora daqui (imutáveis): onu_model_id, pon_port_id, serial.
+    onu_index: int | None = Field(
+        default=None,
+        ge=_ONU_INDEX_MIN,
+        le=_ONU_INDEX_MAX,
+        description="Novo índice na PON. Enviar null limpa o índice.",
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=_DESCRIPTION_MAX,
+        description="Nova descrição. Enviar null limpa.",
+    )
 
 
 class OnuRuntimeStateRead(BaseModel):
