@@ -23,6 +23,12 @@ class AppUser(Base, TimestampMixin):
 
     __tablename__ = "app_user"
 
+    app_user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+
     user_group_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("user_group.user_group_id", ondelete="RESTRICT"),
