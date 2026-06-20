@@ -97,12 +97,12 @@ def create_refresh_token(*, subject: str, session_id: str) -> str:
     return _encode(
         subject=subject,
         session_id=session_id,
-        token_type=TOKEN_TYPE_ACCESS,
+        token_type=TOKEN_TYPE_REFRESH,
         expires_minutes=settings.security.refresh_token_expire_minutes,
     )
 
 
-def encode_token(token: str) -> dict[str, Any]:
+def decode_token(token: str) -> dict[str, Any]:
     """Decodifica e válida assinatura + expiração do token.
     Levanta jwt.InvalidTokenError (inclui ExpiredSignatureError)
     em qualquer problema. o chamador traduz para AuthenticationError."""
