@@ -78,6 +78,26 @@ def _try_inventory_cleanup() -> None:
         engine = create_engine(_settings.database.build_app_sync_url())
         try:
             with engine.connect() as conn, conn.begin():
+                # Sessões primeiro (FK CASCADE de app_user, mas é removida
+                # explicitamente por clareza), depois usuários, depois grupos.
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM app_user_session WHERE app_user_id IN (
+                            SELECT app_user_id FROM app_user WHERE username LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text("DELETE FROM app_user WHERE username LIKE :p"),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text("DELETE FROM user_group WHERE name LIKE :p"),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
                 # ONU: deletar ANTES de pon_port e onu_model,
                 # que a ONU referencia. onu_runtime_state cascateia no hard
                 # delete da ONU, mas removemos explicitamente por clareza.
