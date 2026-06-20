@@ -11,6 +11,8 @@ from app.api.errors import register_error_handlers
 from app.api.middleware.logging import LoggingMiddleware
 from app.api.middleware.request_id import RequestIDMiddleware
 from app.api.v1.routes import (
+    app_users,
+    auth,
     chassis,
     credentials,
     diagnostics,
@@ -25,6 +27,7 @@ from app.api.v1.routes import (
     service_profiles,
     slots,
     topology,
+    user_groups,
     vlans,
 )
 from app.core.config import settings
@@ -107,6 +110,9 @@ def create_app() -> FastAPI:
     app.include_router(line_profiles.router, prefix="/api/v1")
     app.include_router(service_profiles.router, prefix="/api/v1")
     app.include_router(onus.router, prefix="/api/v1")
+    app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(user_groups.router, prefix="/api/v1")
+    app.include_router(app_users.router, prefix="/api/v1")
 
     return app
 
