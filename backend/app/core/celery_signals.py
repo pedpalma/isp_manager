@@ -1,14 +1,18 @@
 # Sinais do Celery: correlação de logs e configuração de logging do worker.
 
 # Fluxo do request_id:
-#   1. A API recebe um request; o RequestIDMiddleware amarra o request_id no
-#      contexto (structlog.contextvars).
-#   2. A rota chama ping.delay(). before_task_publish lê o request_id do
-#      contexto e o anexa nos HEADERS da mensagem Celery.
-#   3. No worker, task_prerun lê o request_id do header e o amarra no contexto
-#      do processo do worker.
-#   4. Tudo que o worker logar durante a task sai com o MESMO request_id.
-#   5. task_postrun limpa o contexto para o id não vazar para a próxima task.
+# 1. A API recebe um request;
+# o RequestIDMiddleware amarra o request_id no contexto (structlog.contextvars).
+
+# 2. A rota chama ping.delay(). before_task_publish lê o request_id do
+# contexto e o anexa nos HEADERS da mensagem Celery.
+
+# 3. No worker, task_prerun lê o request_id do header
+# e o amarra no contexto do processo do worker.
+
+# 4. Tudo que o worker logar durante a task sai com o MESMO request_id.
+
+# 5. task_postrun limpa o contexto para o id não vazar para a próxima task.
 
 from __future__ import annotations
 
@@ -36,15 +40,15 @@ log = get_logger(__name__)
 @setup_logging.connect
 def _configure_worker_logging(**_kwargs: Any) -> None:
     """Conectar a setup_logging faz o Celery NÃO instalar o logging próprio dele,
-    deixando o nosso structlog no comando dentro do worker."""
+    deixando o custom structlog no comando dentro do worker."""
     configure_logging()
 
 
 @before_task_publish.connect
 def _inject_request_id(headers: dict[str, Any] | None = None, **_kwargs: Any) -> None:
     """Lado API: anexa o request_id corrente nos headers da task.
-    Com o protocolo v2 do Celery (padrão), chaves em `headers` viram atributos
-    de `task.request` no worker."""
+    Com o protocolo v2 do Celery (padrão), chaves em `headers`
+    viram atributos de `task.request` no worker."""
     request_id = get_request_id()
     if request_id and headers is not None:
         headers[REQUEST_ID_KEY] = request_id
