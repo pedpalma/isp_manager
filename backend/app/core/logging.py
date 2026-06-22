@@ -1,19 +1,19 @@
 # Configuração central de logging estruturado (structlog).
-#
+
 # Único ponto de verdade do FORMATO de log para todos os caminhos:
-#
-#   1. configure_logging() é chamada no startup da API (dentro de create_app())
-#      e do worker (via setup_logging signal do Celery).
-#
-#   2. get_uvicorn_log_config() retorna o dictConfig do stdlib que o uvicorn
-#      aplica via --log-config no boot do container. Cobre o intervalo entre
-#      o uvicorn subir e o app.main:app ser importado (banner, ciclo do
-#      reloader, eventuais erros de import).
-#
-#   3. make_uvicorn_formatter() é a factory referenciada pelo dictConfig
-#      através de "()": "app.core.logging.make_uvicorn_formatter". Devolve o
-#      MESMO ProcessorFormatter que configure_logging() instala depois.
-#
+
+# 1. configure_logging() é chamada no startup da API (dentro de create_app())
+# e do worker (via setup_logging signal do Celery).
+
+# 2. get_uvicorn_log_config() retorna o dictConfig do stdlib que o uvicorn
+# aplica via --log-config no boot do container. Cobre o intervalo entre
+# o uvicorn subir e o app.main:app ser importado (banner, ciclo do
+# reloader, eventuais erros de import).
+
+# 3. make_uvicorn_formatter() é a factory referenciada pelo dictConfig
+# através de "()": "app.core.logging.make_uvicorn_formatter". Devolve o
+# MESMO ProcessorFormatter que configure_logging() instala depois.
+
 # Os três caminhos terminam usando _build_formatter() e _build_pre_chain().
 # Sem duplicação de configuração; sem chance de divergir.
 
@@ -122,7 +122,7 @@ def get_uvicorn_log_config() -> dict[str, Any]:
                 "handlers": ["default"],
                 "propagate": False,
             },
-            # uvicorn.access: silenciado. Nosso LoggingMiddleware já loga cada
+            # uvicorn.access: silenciado. o LoggingMiddleware já loga cada
             # request com mais contexto (request_id, duração).
             "uvicorn.access": {
                 "level": "WARNING",
@@ -180,7 +180,7 @@ def configure_logging() -> None:
     root.addHandler(handler)
     root.setLevel(level)
 
-    # uvicorn.access: silenciado. Nosso LoggingMiddleware já loga cada request
+    # uvicorn.access: silenciado. O LoggingMiddleware já loga cada request
     # com mais contexto. (Mesma decisão do dictConfig acima; replicada aqui
     # porque configure_logging() pode rodar em contextos sem --log-config,
     # como dentro do worker Celery.)
