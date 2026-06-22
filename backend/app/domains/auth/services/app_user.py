@@ -24,8 +24,8 @@ from app.domains.auth.security import hash_password
 
 log = get_logger(__name__)
 
-# Duas unicidades TOTAIS concorrentes: inspeciona o nome da constraint na
-# IntegrityError (padrão olt/onu). Constantes no topo.
+# Duas unicidades TOTAIS concorrentes: inspecionamos o nome da constraint na
+# IntegrityError (padrão olt/onu). Constantes no topo, conforme convenção.
 _UQ_USERNAME = "uq_app_user_username"
 _UQ_EMAIL = "uq_app_user_email"
 
@@ -84,7 +84,7 @@ class AppUserService:
         if await self._repo.get_by_email(data.email) is not None:
             raise AppUserEmailConflict(data.email)
 
-        # 3. hash da senha em claro
+        # 3. hash da senha em claro (nunca persistimos o claro)
         user = AppUser(
             user_group_id=data.user_group_id,
             username=data.username,
@@ -103,6 +103,13 @@ class AppUserService:
             if violated == _UQ_EMAIL:
                 raise AppUserEmailConflict(data.email) from exc
             raise AppUserUsernameConflict(data.username) from exc
+
+        # Recarrega o objeto: colunas nullable sem server_default (last_login_at)
+        # não foram carregadas no INSERT e ficariam expiradas. Acessa-las na
+        # serialização (AppUserRead) dispararia lazy-load assíncrono fora do
+        # greenlet e quebraria. O refresh traz todas as colunas como valores
+        # reais, igual ao caminho do GET.
+        await self._session.refresh(user)
 
         log.info(
             "app_user.created",
@@ -141,8 +148,12 @@ class AppUserService:
         except IntegrityError as exc:
             await self._session.rollback()
             # Corrida no email (entre pre-check e commit). username imutável,
-            # então a única colisão possível aqui eh o email.
+            # então a única colisão possível aqui é o email.
             raise AppUserEmailConflict(payload.get("email", "")) from exc
+
+        # Mesmo motivo do create: garante objeto totalmente carregado antes da
+        # serialização em AppUserRead.
+        await self._session.refresh(user)
 
         log.info(
             "app_user.updated",

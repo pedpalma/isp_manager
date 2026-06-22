@@ -1,12 +1,16 @@
-# Testes de integração dos fluxos de autenticação.
-
-# Helpers exportados (_bootstrap_admin, _login, _unique, _create_user) são
+# Testes de integracao dos fluxos de autenticacao.
+#
+# Helpers exportados (_bootstrap_admin, _login, _unique, _create_user) sao
 # reutilizados por test_user_groups.py e test_app_users.py.
-
-# Bootstrap: como não existe admin antes do primeiro login, o helper insere
+#
+# Bootstrap: como nao existe admin antes do primeiro login, o helper insere
 # um admin direto no banco (mesmo hash argon2 do app), dentro do grupo
-# semeado 'Administrador' ({"all": true}), e então faz login pela API. Todo
-# o resto (criar grupos/usuários) passa pela API ja autenticada.
+# semeado 'Administrador' ({"all": true}), e entao faz login pela API. Todo
+# o resto (criar grupos/usuarios) passa pela API ja autenticada.
+#
+# A conexao sync usa `settings.database.build_app_sync_url()` para falar
+# com o MESMO banco que o real_client usa (o conftest fixa POSTGRES_HOST
+# para localhost por padrao). Evita criar uma "segunda URL" descolada.
 
 from __future__ import annotations
 
@@ -21,6 +25,10 @@ API = "/api/v1"
 _PASSWORD = "pytest-Secret123"
 
 
+def _sync_engine():
+    return create_engine(settings.database.build_app_sync_url())
+
+
 def _unique(prefix: str) -> str:
     return f"pytest-{prefix}-{uuid4().hex[:8]}"
 
@@ -29,7 +37,7 @@ def _bootstrap_admin(real_client) -> tuple[dict[str, str], str]:
     """Cria um admin (pytest-admin-*) no grupo semeado 'Administrador' e
     devolve (headers Bearer, username)."""
     username = _unique("admin")
-    engine = create_engine(settings.database.build_app_sync_url())
+    engine = _sync_engine()
     try:
         with engine.connect() as conn, conn.begin():
             row = conn.execute(
@@ -111,7 +119,7 @@ def test_login_success(real_client):
 
 def test_login_returns_tokens_and_flags(real_client):
     username = _unique("admin")
-    engine = create_engine(settings.database.build_app_sync_url())
+    engine = _sync_engine()
     try:
         with engine.connect() as conn, conn.begin():
             row = conn.execute(
@@ -171,7 +179,7 @@ def test_login_inactive_user(real_client):
 # Refresh
 def test_refresh_returns_new_access(real_client):
     username = _unique("admin")
-    engine = create_engine(settings.database.build_app_sync_url())
+    engine = _sync_engine()
     try:
         with engine.connect() as conn, conn.begin():
             row = conn.execute(
@@ -214,7 +222,7 @@ def test_logout_revokes_session(real_client):
     assert real_client.get(f"{API}/auth/me", headers=headers).status_code == 200
     # logout
     assert real_client.post(f"{API}/auth/logout", headers=headers).status_code == 204
-    # depois: o mesmo access token não serve mais (sessão revogada)
+    # depois: o mesmo access token nao serve mais (sessao revogada)
     assert real_client.get(f"{API}/auth/me", headers=headers).status_code == 401
 
 
@@ -259,7 +267,7 @@ def test_change_password_success_revokes_and_allows_new(real_client):
         json={"current_password": password, "new_password": new_password},
     )
     assert resp.status_code == 204, resp.text
-    # sessão antiga revogada
+    # sessao antiga revogada
     assert real_client.get(f"{API}/auth/me", headers=headers).status_code == 401
     # senha nova funciona
     assert (
@@ -268,7 +276,7 @@ def test_change_password_success_revokes_and_allows_new(real_client):
         ).status_code
         == 200
     )
-    # senha antiga não funciona mais
+    # senha antiga nao funciona mais
     assert (
         real_client.post(
             f"{API}/auth/login", json={"username": username, "password": password}

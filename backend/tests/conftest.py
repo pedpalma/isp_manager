@@ -78,8 +78,8 @@ def _try_inventory_cleanup() -> None:
         engine = create_engine(_settings.database.build_app_sync_url())
         try:
             with engine.connect() as conn, conn.begin():
-                # Sessões primeiro (FK CASCADE de app_user, mas é removida
-                # explicitamente por clareza), depois usuários, depois grupos.
+                # Sessoes primeiro (FK CASCADE de app_user, mas removemos
+                # explicitamente por clareza), depois usuarios, depois grupos.
                 conn.execute(
                     text(
                         """

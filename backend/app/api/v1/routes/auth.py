@@ -1,10 +1,12 @@
 # Rotas de autenticação.
-#
+
 # Publicas: POST /auth/login, POST /auth/refresh.
 # Autenticadas (qualquer usuário ativo): POST /auth/logout, GET /auth/me,
 # POST /auth/change-password.
 
 from __future__ import annotations
+
+import ipaddress
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,15 +30,32 @@ def get_auth_service(session: AsyncSession = Depends(get_session)) -> AuthServic
     return AuthService(session)
 
 
+def _client_ip(request: Request) -> str | None:
+    """IP do cliente, apenas se for um endereço valido.
+
+    `request.client.host` nem sempre é um IP: o TestClient envia
+    'testclient', e um proxy mal configurado pode injetar lixo. A coluna
+    `app_user_session.ip_address` é INET, então gravar um não-IP estoura o
+    INSERT (asyncpg DataError). Saneamos na borda: o que não parsear vira None.
+    Auditoria de IP é best-effort, não pode derrubar o login."""
+    if request.client is None:
+        return None
+    host = request.client.host
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return None
+    return host
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: LoginRequest,
     request: Request,
     service: AuthService = Depends(get_auth_service),
 ) -> TokenResponse:
-    ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
-    return await service.login(payload, ip_address=ip_address, user_agent=user_agent)
+    return await service.login(payload, ip_address=_client_ip(request), user_agent=user_agent)
 
 
 @router.post("/refresh", response_model=AccessTokenResponse)

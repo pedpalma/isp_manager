@@ -60,7 +60,7 @@ class AppUserRead(BaseModel):
     app_user_id: UUID
     user_group_id: UUID
     username: str
-    email: set
+    email: str
     active: bool
     must_change_password: bool
     last_login_at: datetime | None

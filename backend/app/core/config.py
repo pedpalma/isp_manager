@@ -186,9 +186,9 @@ class Settings(BaseSettings):
     model_config = _COMMON_CONFIG
 
     app: AppSettings = Field(default_factory=AppSettings)
-    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
+    database: DatabaseSettings = Field(default_factory=DatabaseSettings)  # type: ignore
     redis: RedisSettings = Field(default_factory=RedisSettings)
-    security: SecuritySettings = Field(default_factory=SecuritySettings)
+    security: SecuritySettings = Field(default_factory=SecuritySettings)  # type: ignore
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
 
 
