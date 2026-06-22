@@ -1,4 +1,4 @@
-# Rotas REST de PonPort. Prefix com hifen (convenção dos paths multi-palavra).
+# Rotas REST de PonPort. Prefix com hífen (convenção dos paths multi-palavra).
 
 from __future__ import annotations
 
