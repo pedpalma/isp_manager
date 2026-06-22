@@ -1,20 +1,20 @@
 # Handlers globais de exceção.
 
-# Padroniza TODA resposta de erro no formato:
-#   {
-#     "error": {
-#       "code": "not_found",
-#       "message": "...",
-#       "details": {...} | null,
-#       "request_id": "..."
-#     }
-#   }
+"""Padroniza TODA resposta de erro no formato:
+{
+    "error": {
+        "code": "not_found",
+        "message": "...",
+        "details": {...} | null,
+        "request_id": "..."
+    }
+}"""
 
 # Cobre quatro casos:
-# - AppException -> erros de negócio (status/código vêm da exceção)
-# - RequestValidationError -> corpo/query inválidos (Pydantic/FastAPI) -> 422
-# - HTTPException -> HTTPException levantada manualmente
-# - Exception -> qualquer coisa não tratada -> 500 genérico
+# AppException -> erros de negócio (status/código vêm da exceção)
+# RequestValidationError -> corpo/query inválidos (Pydantic/FastAPI) -> 422
+# HTTPException -> HTTPException levantada manualmente
+# Exception -> qualquer coisa não tratada -> 500 genérico
 
 # Em dev (settings.app.expose_internal_errors == True) o 500 expõe a mensagem
 # real; em prod, devolve texto genérico e o detalhe fica só no log.
@@ -81,7 +81,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AppException)
     async def handle_app_exception(_request: Request, exc: AppException) -> JSONResponse:
-        # 5xx é problema nosso: loga como erro. 4xx é esperado: loga como info.
+        # 5xx loga como erro. 4xx é esperado, loga como info.
         if exc.status_code >= 500:
             log.error("app_exception", error_code=exc.error_code, message=exc.message)
         else:
@@ -102,7 +102,7 @@ def register_error_handlers(app: FastAPI) -> None:
                 code="validation_error",
                 message="Falha de validação na requisição.",
                 # `exc.errors()` pode conter objetos não-serializáveis em ctx
-                details=_sanitize_validation_errors(exc.errors()),
+                details=_sanitize_validation_errors(exc.errors()),  # type: ignore
             ),
         )
 
