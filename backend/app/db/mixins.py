@@ -1,8 +1,8 @@
 # Mixins reutilizáveis para os models ORM.
 
 # Espelham as colunas que se repetem em quase toda tabela do DDL.sql:
-#   - created_at / updated_at  -> TimestampMixin
-#   - deleted_at (soft delete) -> SoftDeleteMixin
+# - created_at / updated_at -> TimestampMixin
+# - deleted_at (soft delete) -> SoftDeleteMixin
 
 from __future__ import annotations
 
