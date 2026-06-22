@@ -1,5 +1,5 @@
 # Rotas REST de Service Profile. Prefix com hífen (/service-profiles),
-# flat com ?olt_id=. DELETE nao exposto.
+# flat com ?olt_id=. DELETE não exposto.
 
 from __future__ import annotations
 
