@@ -1,10 +1,11 @@
 # Ambiente de execução das migrations do Alembic.
 
 """
-1. Descobre a URL do banco a partir das Settings da aplicação — usando o
-     role `isp_migrator` (CREATE/ALTER/DROP) e o driver SÍNCRONO psycopg.
-     O runtime da API usa outro role (`isp_app`) com permissões mínimas.
-  2. Configura o contexto de migration nos modos online e offline.
+1. Descobre a URL do banco a partir das Settings da aplicação, usando o
+role `isp_migrator` (CREATE/ALTER/DROP) e o driver SÍNCRONO psycopg.
+O runtime da API usa outro role (`isp_app`) com permissões mínimas.
+
+2. Configura o contexto de migration nos modos online e offline.
 """
 
 from __future__ import annotations
