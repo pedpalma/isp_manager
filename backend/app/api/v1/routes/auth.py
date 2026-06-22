@@ -31,7 +31,7 @@ def get_auth_service(session: AsyncSession = Depends(get_session)) -> AuthServic
 
 
 def _client_ip(request: Request) -> str | None:
-    """IP do cliente, apenas se for um endereço valido.
+    """IP do cliente, apenas se for um endereço válido.
 
     `request.client.host` nem sempre é um IP: o TestClient envia
     'testclient', e um proxy mal configurado pode injetar lixo. A coluna
