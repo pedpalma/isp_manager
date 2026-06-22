@@ -1,8 +1,8 @@
 # Paginação reutilizável.
-#
+
 # Padrão simples offset/limit, suficiente para listas curtas de catálogo.
-# Para tabelas com volume alto (ex.: optical_reading) vamos avaliar cursor
-# pagination no marco correspondente.
+# Para tabelas com volume alto (ex.: optical_reading).
+# TODO: avaliar cursor pagination.
 
 from __future__ import annotations
 
@@ -48,13 +48,13 @@ def page_params(
     """Dependency: lê `?page=...&page_size=...` da URL e devolve `PageParams`.
 
     Usado nas rotas como `params: PageParams = Depends(page_params)`.
-    Mantemos esta função separada do BaseModel acima para o FastAPI gerar a
+    Essa função é mantida separada do BaseModel acima para o FastAPI gerar a
     documentação OpenAPI com cada parâmetro listado individualmente.
     """
     return PageParams(page=page, page_size=page_size)
 
 
-class Page(BaseModel, Generic[T]):
+class Page(BaseModel, Generic[T]):  # noqa: UP046
     """Página de resultados retornada pelas rotas de listagem."""
 
     # Permite que o response_model=Page[XxxRead] funcione com instâncias
