@@ -1,4 +1,5 @@
-# Rotas REST de Line Profile. Prefix com hífen (/line-profiles), flat com ?olt_id= (D13.10). DELETE nao exposto.
+# Rotas REST de Line Profile. Prefix com hífen (/line-profiles),
+# flat com ?olt_id=. DELETE não exposto.
 
 from __future__ import annotations
 
