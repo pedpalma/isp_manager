@@ -1,10 +1,10 @@
 # Rotas REST de Manufacturer.
 
 # Convenções (válidas para todos os routers de catálogo):
-# - GET    /manufacturers -> lista paginada (filtros por query string)
-# - GET    /manufacturers/{id} -> detalhe
-# - POST   /manufacturers -> criação (201 Created)
-# - PATCH  /manufacturers/{id} -> atualização parcial
+# - GET /manufacturers -> lista paginada (filtros por query string)
+# - GET /manufacturers/{id} -> detalhe
+# - POST /manufacturers -> criação (201 Created)
+# - PATCH /manufacturers/{id} -> atualização parcial
 
 # DELETE não é exposto. Para "desativar" um fabricante, use PATCH com
 # `{"active": false}`. Apagar de verdade quebraria as FKs em olt_model,
