@@ -19,17 +19,16 @@ from app.domains.auth.security import TOKEN_TYPE_ACCESS, decode_token
 
 
 def get_current_actor() -> Actor:
+    # TODO: aplicar autenticação.
     """Devolve o ator atual da requisição.
 
-    Hoje sempre retorna `system_actor()` porque ainda não temos autenticação.
-    Quando o Marco de Auth chegar, este helper passa a:
+    Hoje sempre retorna `system_actor()`, este helper passa a:
     1) ler `Authorization: Bearer ...` da requisição,
     2) validar o JWT,
     3) construir um `Actor` real com `actor_id` e `username` do token.
 
     Os services não precisam saber de nada disso: continuam recebendo
-    `actor: Actor` e a fonte de verdade da identidade vive AQUI.
-    """
+    `actor: Actor` é a fonte de verdade da identidade vive AQUI."""
     return system_actor()
 
 
@@ -54,7 +53,8 @@ class CurrentUser:
 
     @property
     def is_admin(self) -> bool:
-        # V1: {"all": true} concede tudo. Permissões finas ficam para depois.
+        # V1: {"all": true} concede tudo.
+        # TODO: aplicar refinamento de permissões por user type.
         return bool(self.permissions.get("all"))
 
     def to_actor(self) -> Actor:
