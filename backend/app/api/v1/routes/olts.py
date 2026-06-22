@@ -7,7 +7,8 @@
 # - PATCH /olts/{id} -> atualização parcial
 # - DELETE /olts/{id} -> soft delete (204 No Content)
 
-# Diferente de credential, DELETE É exposto: significa soft delete, que libera name e o par (ip, porta).
+# Diferente de credential, DELETE É exposto: significa soft delete,
+# que libera name e o par (ip, porta).
 # Para apenas pausar sem liberar, use PATCH com {"active": false}.
 
 from __future__ import annotations
