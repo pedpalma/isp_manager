@@ -67,11 +67,11 @@ def downgrade() -> None:
             FOR r IN
                 SELECT tablename FROM pg_tables
                 WHERE schemaname = 'public'
-                  AND tablename <> 'alembic_version'   -- preserva a tabela de controle do Alembic
+                AND tablename <> 'alembic_version'   -- preserva a tabela de controle do Alembic
             LOOP
                 EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', r.tablename);
             END LOOP;
- 
+
             -- 2) Tipos ENUM (CREATE TYPE não é idempotente; precisa sair para
             --    o re-upgrade não falhar com "type already exists").
             FOR r IN
@@ -84,9 +84,9 @@ def downgrade() -> None:
             END LOOP;
         END
         $$;
- 
+
         -- 3) Funções desta migration, nomeadas para NÃO tocar em funções de
-        --    extensões (ex.: gen_random_uuid do pgcrypto).
+        --    extensões (ex.: gen_random_uuid do pycrypto).
         DROP FUNCTION IF EXISTS public.create_optical_reading_partition(date) CASCADE;
         DROP FUNCTION IF EXISTS public.ensure_onu_runtime_state() CASCADE;
         DROP FUNCTION IF EXISTS public.set_updated_at() CASCADE;
