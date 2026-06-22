@@ -1,11 +1,11 @@
 # Base declarativa do SQLAlchemy.
 
 # Mapa de chaves do SQLAlchemy -> nosso prefixo:
-#   ix -> idx_   (índices)
-#   uq -> uq_    (unique)
-#   ck -> chk_   (check)
-#   fk -> fk_    (foreign key)
-#   pk -> pk_    (primary key)
+# ix -> idx_ (índices)
+# uq -> uq_ (unique)
+# ck -> chk_ (check)
+# fk -> fk_ (foreign key)
+# pk -> pk_ (primary key)
 
 from __future__ import annotations
 
