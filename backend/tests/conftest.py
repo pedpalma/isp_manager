@@ -5,6 +5,11 @@ os.environ.setdefault("ISP_MIGRATOR_DB_PASSWORD", "test-migrator-pass")
 os.environ.setdefault("API_SECRET_KEY", "x" * 48)
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault("LOG_FORMAT", "json")
+# Secret usado pelos testes de coleta.
+os.environ.setdefault("PYTEST_OLT_SECRET", "pytest-fake-pass")
+# Força adapter mock em qualquer cenário de teste.
+os.environ.setdefault("COLLECTION_OLT_ADAPTER", "mock")
+
 
 import pytest  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
@@ -21,6 +26,18 @@ from app.core.logging import configure_logging, get_request_id  # noqa: E402
 def _logging() -> None:
     # Garante o pipeline de logging configurado (e passa pelo self-test).
     configure_logging()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _celery_eager() -> None:
+    """task_always_eager=True faz .delay() rodar SÍNCRONO no mesmo
+    processo do teste, permitindo asserts imediatos sobre o estado do
+    job pos-POST. task_eager_propagates=True faz exceptions
+    estourarem no teste em vez de serem engolidas (defensivo)."""
+    from app.celery_app import celery_app
+
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
 
 
 def _build_app() -> FastAPI:
@@ -78,8 +95,39 @@ def _try_inventory_cleanup() -> None:
         engine = create_engine(_settings.database.build_app_sync_url())
         try:
             with engine.connect() as conn, conn.begin():
-                # Sessoes primeiro (FK CASCADE de app_user, mas removemos
-                # explicitamente por clareza), depois usuarios, depois grupos.
+                # collection_log -> pending_onu -> collection_job (antes de olt).
+                conn.execute(
+                    text(
+                        """
+                    DELETE FROM collection_log WHERE olt_id IN (
+                        SELECT olt_id FROM olt WHERE name LIKE :p
+                    )
+                    """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                    DELETE FROM pending_onu WHERE olt_id IN (
+                        SELECT olt_id FROM olt WHERE name LIKE :p
+                    )
+                    """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                    DELETE FROM collection_job WHERE olt_id IN (
+                        SELECT olt_id FROM olt WHERE name LIKE :p
+                    )
+                    """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                # Sessões primeiro (FK CASCADE de app_user, mas removemos
+                # explicitamente por clareza), depois usuários, depois grupos.
                 conn.execute(
                     text(
                         """
