@@ -12,6 +12,7 @@ celery_app = Celery(
     include=[
         "app.tasks.health",
         # módulos de tasks adicionais entram aqui
+        "app.tasks.collection",
     ],
 )
 
