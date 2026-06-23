@@ -173,6 +173,24 @@ class LoggingSettings(BaseSettings):
     log_format: Literal["json", "console"] = Field(default="json", alias="LOG_FORMAT")
 
 
+class CollectionSettings(BaseSettings):
+    """Configurações do domínio collection."""
+
+    model_config = _COMMON_CONFIG
+
+    # Adapter de OLT em uso.
+    # ! Mock é default em dev e testes.
+    olt_adapter: Literal["mock", "fiberhome", "zte"] = Field(
+        default="mock",
+        alias="COLLECTION_OLT_ADAPTER",
+    )
+    # Backend de secrets.
+    secret_store: Literal["env"] = Field(
+        default="env",
+        alias="COLLECTION_SECRET_STORE",
+    )
+
+
 class Settings(BaseSettings):
     """
     Settings raiz. Agrega todos os domínios.
@@ -190,6 +208,7 @@ class Settings(BaseSettings):
     redis: RedisSettings = Field(default_factory=RedisSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)  # type: ignore
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    collection: CollectionSettings = Field(default_factory=CollectionSettings)
 
 
 # Instância única exposta no módulo. Instanciada no import: se faltar variável
