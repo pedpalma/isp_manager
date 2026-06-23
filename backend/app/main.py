@@ -14,6 +14,7 @@ from app.api.v1.routes import (
     app_users,
     auth,
     chassis,
+    collection_jobs,
     credentials,
     diagnostics,
     health,
@@ -23,6 +24,7 @@ from app.api.v1.routes import (
     olts,
     onu_models,
     onus,
+    pending_onus,
     pon_ports,
     service_profiles,
     slots,
@@ -113,6 +115,8 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(user_groups.router, prefix="/api/v1")
     app.include_router(app_users.router, prefix="/api/v1")
+    app.include_router(collection_jobs.router, prefix="/api/v1")
+    app.include_router(pending_onus.router, prefix="/api/v1")
 
     return app
 
