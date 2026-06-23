@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 
-class SecretStrore(ABC):
+class SecretStore(ABC):
     @abstractmethod
     def resolve(self, secret_ref: str) -> str:
         """Resolve um ponteiro de secret para o valor.

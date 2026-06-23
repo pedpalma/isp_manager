@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from app.adapters.secrets.base import SecretStrore
+from app.adapters.secrets.base import SecretStore
 from app.adapters.secrets.env_store import EnvSecretStore
 from app.core.config import settings
 from app.core.exceptions import ConfigurationError
 
 
-def get_secret_store() -> SecretStrore:
+def get_secret_store() -> SecretStore:
     name = settings.collection.secret_store
     if name == "env":
         return EnvSecretStore()

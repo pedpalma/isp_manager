@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 
-from app.adapters.secrets.base import SecretStrore
+from app.adapters.secrets.base import SecretStore
 from app.core.exceptions import ConfigurationError
 
 # *Lista de forbidden chars
@@ -34,7 +34,7 @@ def _validate_ref(ref: str) -> str:
     return stripped
 
 
-class EnvSecretStore(SecretStrore):
+class EnvSecretStore(SecretStore):
     def resolve(self, secret_ref: str) -> str:
         name = _validate_ref(secret_ref)
         value = os.environ.get(name)
