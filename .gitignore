@@ -15,7 +15,7 @@ id_ed25519
 *.gpg
 
 # Pastas de secrets.
-secrets/
+/secrets/
 .secrets/
 
 # --> PYTHON / BACKEND <--
@@ -180,6 +180,3 @@ frontend/src/lib/api/generated/
 # Configurações compartilhadas de Docker/Nginx.
 !infra/docker/
 !infra/nginx/
-
-requirements.txt
-requirements-dev.txt
