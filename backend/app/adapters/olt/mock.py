@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -19,11 +20,15 @@ from app.adapters.olt.base import (
     DiscoveryResult,
     OltAdapter,
     OltConnectionConfig,
+    OpticalReading,
+    OpticalReadingResult,
 )
 
 # Storage in_process.
 # !NÃO USAR EM PROD
 _CANNED: dict[UUID, list[dict[str, Any]]] = {}
+# !Canned data para list_optical_readings.
+_CANNED_OPTICAL: dict[UUID, list[dict[str, Any]]] = {}
 
 
 def set_canned_discovery(olt_id: UUID, items: list[dict[str, Any]]) -> None:
@@ -41,6 +46,17 @@ def clear_canned_discovery(olt_id: UUID | None = None) -> None:
         _CANNED.clear()
     else:
         _CANNED.pop(olt_id, None)
+
+
+def set_canned_optical_readings(olt_id: UUID, readings: list[dict[str, Any]]) -> None:
+    """Helper de teste: injeta payload determinístico de leituras ópticas
+    para uma OLT. Cada item do dict deve ter ao menos `serial`. Demais
+    campos são opcionais (rx_power_dbm, tx_power_dbm, temperature, etc.)."""
+    _CANNED_OPTICAL[olt_id] = readings
+
+
+def clear_canned_optical_readings(olt_id: UUID) -> None:
+    _CANNED_OPTICAL.pop(olt_id, None)
 
 
 class MockOltAdapter(OltAdapter):
@@ -73,6 +89,41 @@ class MockOltAdapter(OltAdapter):
             )
         ]
         return DiscoveryResult(discovered=discovered, command_logs=logs)
+
+    def list_optical_readings(
+        self, config: OltConnectionConfig, *, olt_id: UUID
+    ) -> OpticalReadingResult:
+        """Implementação do mock. Devolve leituras do _CANNED_OPTICAL[olt_id]
+        ou lista vazia. Gera um CommandLog fictício para auditoria do log."""
+        raw = _CANNED_OPTICAL.get(olt_id, [])
+        readings: list[OpticalReading] = []
+        for entry in raw:
+            readings.append(
+                OpticalReading(
+                    serial=entry["serial"],
+                    collected_at=entry.get(
+                        "collected_at",
+                        datetime.now(timezone.utc),  # noqa: UP017
+                    ),
+                    rx_power_dbm=entry.get("rx_power_dbm"),
+                    tx_power_dbm=entry.get("tx_power_dbm"),
+                    temperature=entry.get("temperature"),
+                    voltage=entry.get("voltage"),
+                    bias_current=entry.get("bias_current"),
+                    distance_m=entry.get("distance_m"),
+                    status=entry.get("status"),
+                    raw_payload=entry.get("raw_payload", {}),
+                )
+            )
+        command_log = CommandLog(
+            step_name="optical_readings_mock",
+            command_sent="show optical readings (mock)",
+            output_received=f"mock returned {len(readings)} readings for olt {olt_id}",
+            parser_status="ok",
+            success=True,
+            duration_ms=1,
+        )
+        return OpticalReadingResult(readings=readings, command_logs=[command_log])
 
     def health(self, config: OltConnectionConfig) -> bool:
         del config
