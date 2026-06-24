@@ -42,6 +42,10 @@ class ResolutionType(str, Enum):  # noqa: UP042
 # São "soft constants" para evitar string mágica espalhada.
 JOB_TYPE_DISCOVERY = "discovery"
 
+# Constante de job_type para o ciclo de leitura óptica. Coluna job_type
+# e TEXT no DDL, não enum nativo. Padrão idêntico ao JOB_TYPE_DISCOVERY.
+JOB_TYPE_SIGNAL_READING = "signal_reading"
+
 # Conjunto de status terminais. Útil para barrar transições inválidas.
 TERMINAL_JOB_STATUS = frozenset(
     {
