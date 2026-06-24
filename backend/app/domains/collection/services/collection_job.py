@@ -19,7 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
 from app.core.pagination import Page, PageParams
-from app.domains.collection.enums import JOB_TYPE_DISCOVERY, JobStatus, JobTriggerType
+from app.domains.collection.enums import (
+    JOB_TYPE_DISCOVERY,
+    JOB_TYPE_SIGNAL_READING,
+    JobStatus,
+    JobTriggerType,
+)
 from app.domains.collection.exceptions import (
     CollectionJobConflict,
     CollectionJobNotFound,
@@ -129,6 +134,52 @@ class CollectionJobService:
             collection_job_id=str(job.collection_job_id),
             olt_id=str(olt_id),
             job_type=JOB_TYPE_DISCOVERY,
+            actor=str(actor),
+        )
+
+        return CollectionJobDetailRead(
+            **CollectionJobRead.model_validate(job).model_dump(),
+            logs=[],
+        )
+
+    async def create_signal_reading_job(
+        self,
+        *,
+        olt_id: UUID,
+        actor: Actor,
+    ) -> CollectionJobDetailRead:
+        """Cria um job de leitura óptica. Mesmo formato de create_discovery_job:
+        válida OLT viva, inserta com status='pending', trata _UQ_RUNNING
+        para 409 e devolve o detail (sem logs, populados pelo worker).
+        NÃO enfileira a task: rota faz o delay() apos commit."""
+        olt = await OltRepository(self._session).get_by_id(olt_id)
+        if olt is None:
+            raise OltReferenceInvalid(olt_id)
+
+        job = CollectionJob(
+            olt_id=olt_id,
+            requested_by_user_id=actor.actor_id,
+            job_type=JOB_TYPE_SIGNAL_READING,
+            trigger_type=JobTriggerType.MANUAL,
+            payload={},
+        )
+        try:
+            await self._repo.add(job)
+            await self._session.commit()
+        except IntegrityError as exc:
+            await self._session.rollback()
+            constraint = _violated_constraint(str(exc.orig))
+            if constraint == _UQ_RUNNING:
+                raise CollectionJobConflict(olt_id, JOB_TYPE_SIGNAL_READING) from exc
+            raise
+
+        await self._session.refresh(job)
+
+        log.info(
+            "collection_job.created",
+            collection_job_id=str(job.collection_job_id),
+            olt_id=str(olt_id),
+            job_type=JOB_TYPE_SIGNAL_READING,
             actor=str(actor),
         )
 
