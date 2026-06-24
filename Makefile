@@ -272,6 +272,9 @@ db-reset: ## DESTRUTIVO: apaga e recria o banco vazio
 db-seed: ## Popula banco com dados de seed (fabricantes, grupos)
 	@$(COMPOSE) exec $(SERVICE_API) python -m scripts.seed_db
 
+.PHONY: admin-seed
+admin-seed:
+	@$(COMPOSE) exec $(SERVICE_API) python -m scripts.seed_admin
 
 # TESTES E QUALIDADE
 
