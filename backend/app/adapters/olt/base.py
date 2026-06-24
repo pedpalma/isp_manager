@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -78,6 +79,38 @@ class DiscoveryResult:
     command_logs: list[CommandLog]
 
 
+@dataclass(frozen=True, slots=True)
+class OpticalReading:
+    """Uma leitura óptica vinda do equipamento para UMA ONU.
+
+    serial é a chave de correlação com a ONU no inventário. Worker resolve
+    para onu_id via OnuRepository.get_active_by_serial; se não houver
+    ONU viva, a leitura e descartada com log WARN (R7) e o job vira PARTIAL.
+
+    collected_at é o timestamp REPORTADO PELO EQUIPAMENTO. Quando o vendor
+    não fornece timestamp confiável, o adapter usa datetime.now(UTC) no
+    momento da extração. Persistido tal como veio em optical_reading."""
+
+    serial: str
+    collected_at: datetime
+    rx_power_dbm: float | None = None
+    tx_power_dbm: float | None = None
+    temperature: float | None = None
+    voltage: float | None = None
+    bias_current: float | None = None
+    distance_m: float | None = None
+    status: str | None = None
+    raw_payload: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class OpticalReadingResult:
+    """Resultado completo de uma chamada list_optical_readings."""
+
+    readings: list[OpticalReading]
+    command_logs: list[CommandLog]
+
+
 class OltAdapter(ABC):
     """Contrato comum  entre vendor adapters e o mock."""
 
@@ -93,3 +126,14 @@ class OltAdapter(ABC):
     @abstractmethod
     def health(self, config: OltConnectionConfig) -> bool:
         """Ping ao equipamento. Serve para checagens proativas."""
+
+    @abstractmethod
+    def list_optical_readings(
+        self, config: OltConnectionConfig, *, olt_id: UUID
+    ) -> OpticalReadingResult:
+        """Lista leituras ópticas (RX/TX, temperatura, tensão etc.)
+        das ONUs vivas naquela OLT.
+
+        Mesma sessão SSH usada por list_unprovisioned_onus pode cobrir este método.
+
+        olt_id passa como contexto para logs; adapter não consulta o banco."""
