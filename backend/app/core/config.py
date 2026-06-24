@@ -191,6 +191,35 @@ class CollectionSettings(BaseSettings):
     )
 
 
+class OpticalSettings(BaseSettings):
+    """Configurações do domínio optical."""
+
+    model_config = _COMMON_CONFIG
+
+    # TTL do cache in-process de thresholds resolvidos.
+    # 60s e o sweet spot: poucas queries ao banco por job, e o stale
+    # operacional aceitável apos mudar policy.
+    threshold_cache_ttl_seconds: int = Field(
+        default=60,
+        alias="OPTICAL_THRESHOLD_CACHE_TTL_SECONDS",
+    )
+
+    # Retenção de optical_reading. Partições mais antigas que
+    # este horizonte são dropadas pela task drop_old_optical_partitions.
+    partition_retention_days: int = Field(
+        default=90,
+        alias="OPTICAL_PARTITION_RETENTION_DAYS",
+    )
+
+    # Idade além da qual um collection_job em 'running' e considerado
+    # stale e marcado failed por detect_stale_jobs (P-M16 mitigation,
+    # D17.10). Default conservador: 10 minutos.
+    stale_job_threshold_minutes: int = Field(
+        default=10,
+        alias="COLLECTION_STALE_JOB_THRESHOLD_MINUTES",
+    )
+
+
 class Settings(BaseSettings):
     """
     Settings raiz. Agrega todos os domínios.
@@ -209,6 +238,7 @@ class Settings(BaseSettings):
     security: SecuritySettings = Field(default_factory=SecuritySettings)  # type: ignore
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     collection: CollectionSettings = Field(default_factory=CollectionSettings)
+    optical: OpticalSettings = Field(default_factory=OpticalSettings)
 
 
 # Instância única exposta no módulo. Instanciada no import: se faltar variável
