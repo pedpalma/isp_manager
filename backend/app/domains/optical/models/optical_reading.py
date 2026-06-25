@@ -34,7 +34,7 @@ class OpticalReading(Base):
     )
     tx_power_dbm: Mapped[float | None] = mapped_column(
         Numeric(6, 2, asdecimal=False),
-        nullable=False,
+        nullable=True,
     )
     status: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -54,7 +54,10 @@ class OpticalReading(Base):
         Numeric(5, 2, asdecimal=False),
         nullable=True,
     )
-    voltage: Mapped[float | None] = mapped_column(Numeric(6, 3, asdecimal=False), nullable=True)
+    voltage: Mapped[float | None] = mapped_column(
+        Numeric(6, 3, asdecimal=False),
+        nullable=True,
+    )
     bias_current: Mapped[float | None] = mapped_column(
         Numeric(7, 3, asdecimal=False),
         nullable=True,
