@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.tasks.health",
         # módulos de tasks adicionais entram aqui
         "app.tasks.collection",
+        "app.tasks.partitions",
     ],
 )
 
@@ -34,6 +35,26 @@ celery_app.conf.update(
     result_expires=3600,
     # Marca a task como 'started' assim que o worker pega.
     task_track_started=True,
+    beat_schedule={
+        # Garante partições futuras de optical_reading
+        # *Roda diariamente
+        "ensure-optical-partitions-daily": {
+            "task": "app.tasks.partitions.ensure_optical_partitions",
+            "schedule": 86400.0,  # 24 horas em segundos
+        },
+        # Drop de partições além da retenção
+        # *Roda semanalmente
+        "drop-old-optical-partitions-weekly": {
+            "task": "app.tasks.partitions.drop_old_optical_partitions",
+            "schedule": 604800.0,  # 7 dias em segundos
+        },
+        # Detecção de jobs stale
+        # Roda a cda 5 minutos
+        "detect-stale-collection-jobs": {
+            "task": "app.tasks.collection.detect_stale_jobs",
+            "schedule": 300.0,
+        },
+    },
 )
 
 # Registra os sinais (correlação de request_id API <-> worker + logging do worker).
