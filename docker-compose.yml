@@ -170,7 +170,7 @@ services:
         condition: service_started
     # Worker não precisa de --log-config: setup_logging do Celery já chama
     # configure_logging() no boot do worker (signal em app.core.celery_signals).
-    command: celery -A app.worker:celery_app worker --loglevel=INFO
+    command: celery -A app.worker:celery_app worker --beat --loglevel=INFO
     healthcheck:
       test:
         [
