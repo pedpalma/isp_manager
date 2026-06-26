@@ -20,7 +20,9 @@ from uuid import UUID, uuid4
 # saber o caminho interno do modulo.
 from app.adapters.olt.mock import (  # noqa: F401
     clear_canned_discovery,
+    clear_canned_optical_readings,
     set_canned_discovery,
+    set_canned_optical_readings,
 )
 
 API = "/api/v1"
