@@ -32,7 +32,7 @@ def _logging() -> None:
 def _celery_eager() -> None:
     """task_always_eager=True faz .delay() rodar SÍNCRONO no mesmo
     processo do teste, permitindo asserts imediatos sobre o estado do
-    job pos-POST. task_eager_propagates=True faz exceptions
+    job pós-POST. task_eager_propagates=True faz exceptions
     estourarem no teste em vez de serem engolidas (defensivo)."""
     from app.celery_app import celery_app
 
@@ -85,7 +85,8 @@ PYTEST_PREFIX = "pytest-"
 
 
 def _try_inventory_cleanup() -> None:
-    """Best-effort: deleta registros do inventário com prefixo `pytest-`.
+    """Best-effort: deleta registros com prefixo `pytest-` em toda a pilha.
+    Ordem: optical -> collection -> auth -> inventory.
     Silencioso em qualquer erro (banco fora, schema inexistente, etc.)."""
     try:
         from sqlalchemy import create_engine, text  # noqa: PLC0415
@@ -95,37 +96,82 @@ def _try_inventory_cleanup() -> None:
         engine = create_engine(_settings.database.build_app_sync_url())
         try:
             with engine.connect() as conn, conn.begin():
-                # collection_log -> pending_onu -> collection_job (antes de olt).
+                # ---- optical (M17): deve vir ANTES de collection e inventory ----
+                # Alertas cujas ONUs pertencem a OLTs de teste.
                 conn.execute(
                     text(
                         """
-                    DELETE FROM collection_log WHERE olt_id IN (
-                        SELECT olt_id FROM olt WHERE name LIKE :p
-                    )
-                    """
+                        DELETE FROM optical_alert_event
+                        WHERE onu_id IN (
+                            SELECT o.onu_id
+                            FROM onu o
+                            JOIN pon_port pp ON pp.pon_port_id = o.pon_port_id
+                            JOIN slot s ON s.slot_id = pp.slot_id
+                            JOIN chassis c ON c.chassis_id = s.chassis_id
+                            JOIN olt ol ON ol.olt_id = c.olt_id
+                            WHERE ol.name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                # optical_reading é particionada por collected_at; DELETE no pai
+                # propaga para todas as partições automaticamente.
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM optical_reading
+                        WHERE onu_id IN (
+                            SELECT o.onu_id
+                            FROM onu o
+                            JOIN pon_port pp ON pp.pon_port_id = o.pon_port_id
+                            JOIN slot s ON s.slot_id = pp.slot_id
+                            JOIN chassis c ON c.chassis_id = s.chassis_id
+                            JOIN olt ol ON ol.olt_id = c.olt_id
+                            WHERE ol.name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                # Zera todas as policies: testes que dependem delas criam as suas.
+                # Scope global não é distinguido intencionalmente: policies vazam
+                # entre testes se não limpar tudo.
+                conn.execute(text("DELETE FROM optical_threshold_policy"))
+
+                # ---- collection (M16) ----
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM collection_log WHERE olt_id IN (
+                            SELECT olt_id FROM olt WHERE name LIKE :p
+                        )
+                        """
                     ),
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
                 conn.execute(
                     text(
                         """
-                    DELETE FROM pending_onu WHERE olt_id IN (
-                        SELECT olt_id FROM olt WHERE name LIKE :p
-                    )
-                    """
+                        DELETE FROM pending_onu WHERE olt_id IN (
+                            SELECT olt_id FROM olt WHERE name LIKE :p
+                        )
+                        """
                     ),
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
                 conn.execute(
                     text(
                         """
-                    DELETE FROM collection_job WHERE olt_id IN (
-                        SELECT olt_id FROM olt WHERE name LIKE :p
-                    )
-                    """
+                        DELETE FROM collection_job WHERE olt_id IN (
+                            SELECT olt_id FROM olt WHERE name LIKE :p
+                        )
+                        """
                     ),
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
+
+                # ---- auth (M15) ----
                 # Sessões primeiro (FK CASCADE de app_user, mas removemos
                 # explicitamente por clareza), depois usuários, depois grupos.
                 conn.execute(
@@ -146,6 +192,8 @@ def _try_inventory_cleanup() -> None:
                     text("DELETE FROM user_group WHERE name LIKE :p"),
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
+
+                # ---- inventory (M9-M14) ----
                 # ONU: deletar ANTES de pon_port e onu_model,
                 # que a ONU referencia. onu_runtime_state cascateia no hard
                 # delete da ONU, mas removemos explicitamente por clareza.
@@ -220,7 +268,7 @@ def _try_inventory_cleanup() -> None:
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
 
-                # Perfis e VLANs: filhas de olt, cascateiam pelo nome da OLT pai (mesmo padrão da topologia).
+                # Perfis e VLANs: filhas de olt.
                 conn.execute(
                     text(
                         """
@@ -252,7 +300,7 @@ def _try_inventory_cleanup() -> None:
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
 
-                # Catálogo / inventário direto (mesmo padrão dos marcos anteriores).
+                # Catálogo / inventário direto.
                 conn.execute(
                     text("DELETE FROM onu_model WHERE model LIKE :p"),
                     {"p": f"{PYTEST_PREFIX}%"},

@@ -35,21 +35,25 @@ celery_app.conf.update(
     result_expires=3600,
     # Marca a task como 'started' assim que o worker pega.
     task_track_started=True,
+    # Agendamentos periódicos (Celery beat). Idempotentes; reiniciar o
+    # beat não executa task fora do horário previsto.
+    # - ensure_optical_partitions: cria partições futuras de optical_reading
+    #   (look-ahead de 3 meses). Diária. D17.3.
+    # - drop_old_optical_partitions: dropa partições além da retenção
+    #   (default 90 dias). Semanal. D17.3.
+    # - detect_stale_jobs: marca como failed jobs que ficaram 'running' ou
+    #   'pending' além do threshold (default 10 min). A cada 5 min. D17.10
+    #   e mitigação de P-M16 (janela de órfão entre commit do job e enqueue
+    #   da task Celery).
     beat_schedule={
-        # Garante partições futuras de optical_reading
-        # *Roda diariamente
         "ensure-optical-partitions-daily": {
             "task": "app.tasks.partitions.ensure_optical_partitions",
-            "schedule": 86400.0,  # 24 horas em segundos
+            "schedule": 86400.0,
         },
-        # Drop de partições além da retenção
-        # *Roda semanalmente
         "drop-old-optical-partitions-weekly": {
             "task": "app.tasks.partitions.drop_old_optical_partitions",
-            "schedule": 604800.0,  # 7 dias em segundos
+            "schedule": 604800.0,
         },
-        # Detecção de jobs stale
-        # Roda a cda 5 minutos
         "detect-stale-collection-jobs": {
             "task": "app.tasks.collection.detect_stale_jobs",
             "schedule": 300.0,

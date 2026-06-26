@@ -45,7 +45,7 @@ def ensure_optical_partitions() -> dict[str, int]:
     return {"months_processed": created}
 
 
-@celery_app.tasks(name="app.tasks.partitions.drop_old_optical_partitions", autoretry_for=())
+@celery_app.task(name="app.tasks.partitions.drop_old_optical_partitions", autoretry_for=())
 def drop_old_optical_partitions() -> dict[str, list[str]]:
     """Drop de partições com mês anterior a cutoff (90 dias)."""
     retention_days = settings.optical.partition_retention_days
