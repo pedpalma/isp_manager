@@ -8,8 +8,6 @@
 #   retenção (default 90 dias). Agendada SEMANALMENTE.
 # - Beat schedule definido em app/celery_app.py.
 
-# D17.3 fechada: zero cron externo. Toda gestão de partições vive aqui.
-
 # Privilégios: o role isp_app NÃO tem CREATE/DROP em public por design.
 # A migration 0005 elevou create_optical_reading_partition e
 # drop_optical_reading_partition a SECURITY DEFINER, com owner
