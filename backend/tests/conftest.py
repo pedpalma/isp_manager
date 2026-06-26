@@ -336,6 +336,37 @@ def _inventory_cleanup_session_scope():
     _try_inventory_cleanup()
 
 
+@pytest.fixture(autouse=True)
+def _optical_policy_cleanup_per_test():
+    """Limpa optical_alert_event + optical_threshold_policy ANTES de cada
+    teste. Sem isso, policies criadas em test_X vazam para test_Y e
+    disparam 409 em testes que dependem de unicidade (scope_type,
+    metric_name).
+
+    optical_alert_event tem FK NOT NULL para policy_id; precisa ser
+    apagado ANTES de optical_threshold_policy.
+
+    Best-effort: silencioso em qualquer erro. Se o banco estiver
+    indisponível, deixa estourar no próprio teste."""
+    try:
+        from sqlalchemy import create_engine, text  # noqa: PLC0415
+
+        from app.core.config import settings as _settings  # noqa: PLC0415
+
+        engine = create_engine(_settings.database.build_app_sync_url())
+        try:
+            with engine.connect() as conn, conn.begin():
+                conn.execute(text("DELETE FROM optical_alert_event"))
+                conn.execute(text("DELETE FROM optical_threshold_policy"))
+        finally:
+            engine.dispose()
+    except Exception:
+        pass
+    yield
+    # Pos-test: não limpa de novo. A próxima invocação desta fixture
+    # cuida disso. Evita custo duplicado.
+
+
 @pytest.fixture(scope="session")
 def real_client():
     """TestClient da aplicação real. O `with` aciona o lifespan: startup
