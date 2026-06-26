@@ -1,11 +1,22 @@
 # Tasks Celery do domínio collection.
 
+# Três tasks:
+# - run_discovery_job: cicla descoberta de ONUs não provisionadas.
+# - run_signal_reading_job: cicla leitura de potência óptica.
+# - detect_stale_jobs: P-M16 mitigation (D17.10). Marca como FAILED jobs
+#   que ficaram em 'running' ou 'pending' além do threshold configurável.
+
 # SEM autoretry. autoretry_for=() desativa qualquer retry implícito.
 # Falha do job é terminal: error_message preservado, status=FAILED.
 # Retry é novo POST manual pelo operador.
 
-# A task delega a lógica para discovery_worker.run_discovery_job_sync,
-# que NUNCA propaga exception. A task em si só traduz UUID e loga entrada/Saida.
+# As tasks de coleta delegam a lógica para os workers respectivos, que
+# NUNCA propagam exception. As tasks em si só traduzem UUID e logam
+# entrada/saída.
+
+# IMPORTANTE: este arquivo é entregue COMPLETO para evitar erros de
+# transcrição em SQL inline (a string AND virou ABD ao aplicar PATCH
+# manual em revisão anterior).
 
 from __future__ import annotations
 
@@ -24,8 +35,10 @@ log = structlog.get_logger(__name__)
 
 @celery_app.task(name="app.tasks.collection.run_discovery_job", autoretry_for=())
 def run_discovery_job(collection_job_id: str) -> str:
-    # Import tardio: discovery_worker importa modelos ORM, que importam
-    # a engine; isso sé é necessário no contexto do worker, não no registro da task.
+    """Dispara o ciclo de descoberta de ONUs para um collection_job pendente.
+
+    Import tardio do worker para evitar carregar modelos ORM no momento
+    do registro da task (acontece no startup da API também)."""
     from app.domains.collection.services.discovery_worker import (
         run_discovery_job_sync,
     )
@@ -40,7 +53,9 @@ def run_discovery_job(collection_job_id: str) -> str:
 @celery_app.task(name="app.tasks.collection.run_signal_reading_job", autoretry_for=())
 def run_signal_reading_job(collection_job_id: str) -> str:
     """Dispara o ciclo de leitura óptica para um collection_job pendente.
-    Falhas viram FAILED com error_message preservado."""
+
+    Mesmo contrato de run_discovery_job: import tardio, sem autoretry,
+    jamais propaga exception. Falhas viram FAILED com error_message."""
     from app.domains.collection.services.signal_reading_worker import (
         run_signal_reading_job_sync,
     )
@@ -60,7 +75,20 @@ def run_signal_reading_job(collection_job_id: str) -> str:
 
 @celery_app.task(name="app.tasks.collection.detect_stale_jobs", autoretry_for=())
 def detect_stale_jobs() -> dict[str, list[str]]:
-    """Marca jobs em 'running' além do threshold como 'failed'."""
+    """Marca como FAILED jobs em 'running' ou 'pending' além do threshold.
+
+    Mitigação interim de P-M16: enqueue Celery pode falhar após commit,
+    deixando job em 'pending' eterno; worker pode crashar
+    deixando 'running' eterno. detect_stale_jobs corre via Celery beat
+    e termina esses jobs com error_message claro.
+
+    Threshold lido de settings.optical.stale_job_threshold_minutes
+    (default 10 min). Roda a cada 5 min via beat_schedule.
+
+    Critério:
+    - status='running' E started_at < cutoff
+    - status='pending' E created_at < cutoff
+    """
     threshold_minutes = settings.optical.stale_job_threshold_minutes
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=threshold_minutes)  # noqa: UP017
     stale_ids: list[str] = []
@@ -71,7 +99,7 @@ def detect_stale_jobs() -> dict[str, list[str]]:
                 SELECT collection_job_id
                 FROM collection_job
                 WHERE (
-                    (status = CAST('running' AS job_status_enum) ABD started_at < :cutoff)
+                    (status = CAST('running' AS job_status_enum) AND started_at < :cutoff)
                     OR (status = CAST('pending' AS job_status_enum) AND created_at < :cutoff)
                 )
                 """
