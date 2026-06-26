@@ -37,7 +37,7 @@ SUPPORTED_OPTICAL_METRICS = frozenset(
 )
 
 # Ordem de prioridade na resolução hierárquica.
-SCOPE_PRIORITY_ORDER = list[OpticalScopeType] = [  # pyright: ignore[reportGeneralTypeIssues]
+SCOPE_PRIORITY_ORDER: list[OpticalScopeType] = [
     OpticalScopeType.ONU,
     OpticalScopeType.PON_PORT,
     OpticalScopeType.OLT,
