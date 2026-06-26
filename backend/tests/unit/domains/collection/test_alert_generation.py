@@ -41,6 +41,6 @@ def test_only_max_threshold():
 
 
 def test_no_thresholds_no_violation():
-    # configuração inválida do ponto de vista do DDL (CHECK exige um),
+    # configuração inválida do ponto de vista do DDL,
     # mas a função em sí não deve quebrar.
     assert _check_violation(0.0, None, None) is False
