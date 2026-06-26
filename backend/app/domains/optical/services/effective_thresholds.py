@@ -1,7 +1,8 @@
-# Service de diagnostico de thresholds efetivos por ONU.
-# Resolve hierarquia (onu > pon_port > olt > global) em UMA query devolve dict.
-# None significa "sem politica aplicável".
-# NÃO usa o ThresholdCache: este e endpoint de inspeção do operador,
+# Service de diagnóstico de thresholds efetivos por ONU.
+# Resolve hierarquia (onu > pon_port > olt > global) em UMA query
+# (list_active_for_chain) e devolve dict cobrindo TODAS as métricas
+# suportadas. None significa "sem política aplicável".
+# NÃO usa o ThresholdCache: este é endpoint de inspeção do operador,
 # precisa devolver estado atual exato (sem stale ate 60s).
 
 from __future__ import annotations
@@ -39,10 +40,15 @@ class EffectiveThresholdsService:
         if onu is None:
             raise OnuNotFound(onu_id)
 
-        # Para encontrar pon_port_id basta a ONU; para olt_id precisa
-        # subir cadeia pon_port -> slot -> chassis -> olt.
+        # Sobe cadeia onu -> pon_port -> slot -> chassis -> olt_id.
+        # CORREÇÃO M17: select_from(Onu) explícito é obrigatório.
+        # Sem ele, SQLAlchemy não identifica a tabela âncora e gera SQL
+        # com FROM duplo (UndefinedTableError em runtime). A coluna
+        # Onu.onu_id no WHERE não é suficiente para inferir âncora quando
+        # o SELECT só projeta colunas de outras tabelas.
         stmt = (
             select(Chassis.olt_id, PonPort.pon_port_id)
+            .select_from(Onu)
             .join(PonPort, PonPort.pon_port_id == Onu.pon_port_id)
             .join(Slot, Slot.slot_id == PonPort.slot_id)
             .join(Chassis, Chassis.chassis_id == Slot.chassis_id)
@@ -50,8 +56,9 @@ class EffectiveThresholdsService:
         )
         row = (await self._session.execute(stmt)).first()
         if row is None:
-            # Defesa em profundidade: não deveria acontecer (get_by_id já
-            # filtrou onu viva), mas se acontecer, levanta 404 mesmo.
+            # Defesa em profundidade: get_by_id já filtrou ONU viva, mas
+            # se a cadeia estiver quebrada (ex: PON deletada de forma
+            # inválida), respondemos 404 também.
             raise OnuNotFound(onu_id)
         olt_id, pon_port_id = row
 
