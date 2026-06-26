@@ -6,8 +6,18 @@
 
 # Sem DELETE: jobs são append-only (history).
 
+# Sob task_always_eager=True (testes), o .delay() roda síncrono no
+# mesmo processo e atualiza o DB para o status terminal antes de
+# retornar. O objeto job em memória, porém, foi obtido ANTES do delay
+# pela sessão async da rota: continua com status='pending'. Para refletir
+# o estado terminal na resposta (e para que os testes possam afirmar
+# sobre status pós-eager), refazemos um get_detail() APÓS o delay.
+# Em produção (não-eager) o get_detail também roda mas devolve 'pending',
+# o que é o estado correto naquele momento.
+
 # Janela de órfão: commit do job + enqueue Celery não são atômicos.
-# Se o enqueue falhar após o commit, o job fica 'pending' para sempre.
+# Se o enqueue falhar após o commit, o job fica 'pending' para sempre;
+# detect_stale_jobs (beat) marca como failed após threshold.
 
 from __future__ import annotations
 
@@ -85,9 +95,9 @@ async def create_discovery_job(
 ) -> CollectionJobDetailRead:
     """Dispara descoberta de ONUs não provisionadas para uma OLT.
 
-    Cria job em 'pending', commita, enfileira a task Celery e retorna.
-    Sob testes com task_always_eager=True, o status retornado já é
-    terminal (success/partial/failed). Em produção, retorna 'pending'."""
+    Cria job em 'pending', commita, enfileira a task Celery, refecha o
+    detalhe atualizado e retorna. Sob testes com task_always_eager=True
+    o detalhe já reflete status terminal (success/partial/failed)."""
     job = await service.create_discovery_job(
         olt_id=payload.olt_id,
         actor=actor,
@@ -95,16 +105,15 @@ async def create_discovery_job(
     try:
         run_discovery_job.delay(str(job.collection_job_id))
     except Exception as exc:
-        # Job já foi commitado. Falha de enqueue NÃO derruba a request:
-        # detect_stale_jobs (Celery beat) marca como failed após threshold.
-        # Fix definitivo via outbox real no M20.
         log.error(
             "collection.enqueue_failed",
             collection_job_id=str(job.collection_job_id),
             job_type="discovery",
             error=str(exc),
         )
-    return job
+    # Refetch após delay para refletir status pós-worker (sob eager) ou
+    # pós-commit (em produção). Mesmo método usado em GET detail.
+    return await service.get_detail(job.collection_job_id, actor=actor)
 
 
 @router.post(
@@ -120,9 +129,9 @@ async def create_signal_reading_job(
 ) -> CollectionJobDetailRead:
     """Dispara coleta de potência óptica para uma OLT.
 
-    Mesmo contrato de discovery: cria job em 'pending', commita,
-    enfileira task Celery. Idempotência concorrente por uq_collection_job_running
-    (compartilhada com discovery)."""
+    Mesmo padrão da rota de discovery: cria + enqueue + refetch.
+    Idempotência concorrente por uq_collection_job_running (compartilhada
+    entre discovery e signal_reading)."""
     job = await service.create_signal_reading_job(
         olt_id=payload.olt_id,
         actor=actor,
@@ -136,4 +145,4 @@ async def create_signal_reading_job(
             job_type="signal_reading",
             error=str(exc),
         )
-    return job
+    return await service.get_detail(job.collection_job_id, actor=actor)
