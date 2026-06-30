@@ -4,8 +4,8 @@
 # 1. manufacturer existe e está ativo
 # 2. olt_model (se informado) existe E pertence ao manufacturer
 # 3. raw_template.scope == template_scope da coluna
-# 4. Unicidade (manufacturer, olt_model, name, version) — pré-check via repo
-# 5. IntegrityError fallback (SELECT->INSERT race entre 4 e o INSERT)
+# 4. Unicidade (manufacturer, olt_model, name, version) pré-check via repo
+# 5. IntegrityError fallback
 
 # Update: campos da chave única são imutáveis (não estão no UpdateSchema),
 # portanto NÃO precisa de try/except IntegrityError. Padrão update_no_try_except.
