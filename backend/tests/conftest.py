@@ -96,7 +96,6 @@ def _try_inventory_cleanup() -> None:
         engine = create_engine(_settings.database.build_app_sync_url())
         try:
             with engine.connect() as conn, conn.begin():
-                # ---- optical (M17): deve vir ANTES de collection e inventory ----
                 # Alertas cujas ONUs pertencem a OLTs de teste.
                 conn.execute(
                     text(
@@ -139,7 +138,33 @@ def _try_inventory_cleanup() -> None:
                 # entre testes se não limpar tudo.
                 conn.execute(text("DELETE FROM optical_threshold_policy"))
 
-                # ---- collection (M16) ----
+                # provisioning
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM normalized_command
+                        WHERE manufacturer_id IN (
+                            SELECT manufacturer_id FROM manufacturer
+                            WHERE slug LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM provisioning_template
+                        WHERE manufacturer_id IN (
+                            SELECT manufacturer_id FROM manufacturer
+                            WHERE slug LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+
+                # collection
                 conn.execute(
                     text(
                         """
@@ -171,7 +196,7 @@ def _try_inventory_cleanup() -> None:
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
 
-                # ---- auth (M15) ----
+                # auth
                 # Sessões primeiro (FK CASCADE de app_user, mas removemos
                 # explicitamente por clareza), depois usuários, depois grupos.
                 conn.execute(
@@ -193,7 +218,7 @@ def _try_inventory_cleanup() -> None:
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
 
-                # ---- inventory (M9-M14) ----
+                # inventory
                 # ONU: deletar ANTES de pon_port e onu_model,
                 # que a ONU referencia. onu_runtime_state cascateia no hard
                 # delete da ONU, mas removemos explicitamente por clareza.
