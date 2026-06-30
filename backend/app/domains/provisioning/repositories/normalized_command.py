@@ -30,7 +30,7 @@ class NormalizedCommandRepository:
         command_key: str,
         version_constraint: str | None,
     ) -> NormalizedCommand | None:
-        """Pré-Check de unicidade PARCIAL"""
+        """Pré-Check da unicidade PARCIAL."""
         stmt = select(NormalizedCommand).where(
             NormalizedCommand.manufacturer_id == manufacturer_id,
             NormalizedCommand.command_key == command_key,
@@ -77,6 +77,11 @@ class NormalizedCommandRepository:
             base = base.where(NormalizedCommand.command_key == command_key)
             count_query = count_query.where(
                 NormalizedCommand.command_key == command_key,
+            )
+        if command_type is not None:
+            base = base.where(NormalizedCommand.command_type == command_type)
+            count_query = count_query.where(
+                NormalizedCommand.command_type == command_type,
             )
         if active is not None:
             base = base.where(NormalizedCommand.active.is_(active))
