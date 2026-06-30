@@ -1,5 +1,5 @@
 # Service de normalized_command.
-
+#
 # Validações no create:
 # 1. manufacturer existe e está ativo
 # 2. olt_model (se informado) existe E pertence ao manufacturer
@@ -78,7 +78,7 @@ class NormalizedCommandService:
                 olt_model_id=payload.olt_model_id,
             )
 
-        # Pré-check só vale se active=TRUE.
+        # Pré-check só vale se active=TRUE (índice parcial).
         if payload.active:
             existing = await self._repo.get_active_by_key(
                 manufacturer_id=payload.manufacturer_id,
@@ -113,6 +113,8 @@ class NormalizedCommandService:
             await self._session.commit()
         except IntegrityError as exc:
             await self._session.rollback()
+            # Aqui usamos payload.* (Pydantic) e NÃO obj.* (ORM expirado);
+            # safe porque payload não passa por expiração de sessão.
             raise NormalizedCommandConflict(
                 payload.manufacturer_id,
                 payload.olt_model_id,
@@ -182,17 +184,25 @@ class NormalizedCommandService:
             else:
                 setattr(obj, field, value)
 
+        # Snapshot dos campos da chave ANTES do commit. Necessário porque
+        # session.rollback() expira os atributos do ORM e ler obj.* depois
+        # dispara lazy-load assíncrono (MissingGreenlet em pytest-asyncio).
+        key_manufacturer_id = obj.manufacturer_id
+        key_olt_model_id = obj.olt_model_id
+        key_command_key = obj.command_key
+        key_version_constraint = obj.version_constraint
+
         try:
             await self._session.commit()
         except IntegrityError as exc:
-            # Reativação (active False -> True) que colide com outro ativo de mesma chave.
-            # Único caminho de conflito no Update aqui.
+            # Reativação (active False -> True) que colide com outro ativo
+            # de mesma chave. Único caminho de conflito no Update aqui.
             await self._session.rollback()
             raise NormalizedCommandConflict(
-                obj.manufacturer_id,
-                obj.olt_model_id,
-                obj.command_key,
-                obj.version_constraint,
+                key_manufacturer_id,
+                key_olt_model_id,
+                key_command_key,
+                key_version_constraint,
             ) from exc
 
         await self._session.refresh(obj)
