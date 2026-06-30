@@ -1,28 +1,15 @@
 # Model ORM da tabela `provisioning_template`.
-#
-# Archetype: catalog. TimestampMixin + active flag; sem deleted_at.
-# Não pertence a uma OLT (catálogo por manufacturer/modelo).
-#
-# Unicidade TOTAL no DDL (M13-style):
-#   uq_provisioning_template_key (manufacturer_id,
-#       COALESCE(olt_model_id, '00000000-0000-0000-0000-000000000000'),
-#       name, version)
-#   SEM WHERE active. Pausar (active=FALSE) NÃO libera a chave; para
-#   reaproveitar a quadrupla, é necessário criar nova `version`.
-#
+
 # Campos imutáveis após criação (não entram em Update):
 #   manufacturer_id, olt_model_id, name, version, template_scope.
-#
+
 # Campos mutáveis:
 #   active, firmware_constraint, command_vars, raw_template.
-#
+
 # raw_template (JSONB NOT NULL): estrutura validada pelo schema Pydantic
-#   RawTemplate (vide schemas/raw_template.py). No DDL fica como JSONB
-#   livre porque o motor (M18c) consome chaves específicas.
-#
-# created_by_user_id: FK para app_user. Preenchido pelo Actor que cria via
-#   API; nullable porque o DDL aceita NULL (templates podem ser semeados
-#   por migration sem actor identificável).
+#   RawTemplate (vide schemas/raw_template.py).
+
+# created_by_user_id: FK para app_user. Preenchido pelo Actor que cria via API.
 
 from __future__ import annotations
 
