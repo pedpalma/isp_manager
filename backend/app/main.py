@@ -21,6 +21,7 @@ from app.api.v1.routes import (
     health,
     line_profiles,
     manufacturers,
+    normalized_commands,
     olt_models,
     olts,
     onu_models,
@@ -30,6 +31,7 @@ from app.api.v1.routes import (
     optical_threshold_policies,
     pending_onus,
     pon_ports,
+    provisioning_templates,
     service_profiles,
     slots,
     topology,
@@ -125,6 +127,8 @@ def create_app() -> FastAPI:
     app.include_router(optical_alerts.router, prefix="/api/v1")
     app.include_router(optical_history.router, prefix="/api/v1")
     app.include_router(optical_threshold_policies.router, prefix="/api/v1")
+    app.include_router(provisioning_templates.router, prefix="/api/v1")
+    app.include_router(normalized_commands.router, prefix="/api/v1")
 
     return app
 
