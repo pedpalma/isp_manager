@@ -18,11 +18,16 @@ from uuid import UUID, uuid4
 
 # Reexport dos helpers do MockOltAdapter para os testes não precisarem
 # saber o caminho interno do modulo.
+# Provisioning e onu_state (M18b) entram aqui para uso do M18c/M18d.
 from app.adapters.olt.mock import (  # noqa: F401
     clear_canned_discovery,
+    clear_canned_onu_state,
     clear_canned_optical_readings,
+    clear_canned_provisioning,
     set_canned_discovery,
+    set_canned_onu_state,
     set_canned_optical_readings,
+    set_canned_provisioning,
 )
 
 API = "/api/v1"
