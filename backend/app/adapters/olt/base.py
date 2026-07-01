@@ -42,9 +42,9 @@ class OltConnectionConfig:
 class DiscoveredOnu:
     """Uma ONU vista no equipamento sem provisionamento.
 
-    o adapter NÃO sabe sobre pon_pot_id do inventário. Devolve raw index
+    o adapter NÃO sabe sobre pon_port_id do inventário. Devolve raw index
     (slot_index, pon_index) e o worker resolve para pon_port_id consultando
-    o inventor. Se não resolver, a ONU é descartada e o job vira PARTIAL."""
+    o inventário. Se não resolver, a ONU é descartada e o job vira PARTIAL."""
 
     serial: str
     slot_index: int
@@ -111,6 +111,83 @@ class OpticalReadingResult:
     command_logs: list[CommandLog]
 
 
+@dataclass(frozen=True, slots=True)
+class OnuLocator:
+    """Localiza uma ONU no equipamento para provisionar, desaprovisionar ou ler estado.
+
+    slot_index + pon_index posicionam a porta PON. serial identifica a ONU
+    antes de estar provisionada; onu_index passa a existir depois que o
+    equipamento atribui um índice na PON."""
+
+    slot_index: int
+    pon_index: int
+    serial: str | None = None
+    onu_index: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PlannedCommand:
+    """Um comando já resolvido, pronto para envio ao equipamento.
+
+    O service resolve command_key -> string renderizada (rendered)
+    usando raw_template + normalized_command + snapshot_params ANTES de montar
+    o plano. O adapter apenas envia rendered e respeita timeout_ms. Não há
+    lógica de template dentro do adapter."""
+
+    command_key: str
+    rendered: str
+    timeout_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProvisioningPlan:
+    """Sequência ordenada de comandos resolvidos para uma operação na ONU."""
+
+    locator: OnuLocator
+    commands: list[PlannedCommand] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class StepResult:
+    """Resultado de UM comando executado durante provisionamento.
+
+    output_received é a saída CRUA do equipamento, sem truncamento (o worker
+    trunca antes de gravar, mesma regra do CommandLog). parser_output guarda a
+    interpretação estruturada quando houver; fica None quando o passo não
+    produz dados parseáveis."""
+
+    command_sent: str
+    output_received: str | None = None
+    parser_output: dict[str, Any] | None = None
+    success: bool = True
+    duration_ms: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProvisioningResult:
+    """Resultado completo de provision_onu ou deprovision_onu.
+
+    steps preserva a ordem de execução. overall_success é a decisão terminal do
+    adapter (tipicamente all(step.success), mas o vendor pode decidir diferente
+    com base no estado final relido)."""
+
+    steps: list[StepResult] = field(default_factory=list)
+    overall_success: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class OnuState:
+    """Estado da ONU relido do equipamento após a operação.
+
+    admin_status e operational_status são strings do vocabulário do vendor
+    (o service normaliza depois, se precisar). raw_payload preserva a saída crua
+    para auditoria e para o parser evoluir sem quebrar o contrato."""
+
+    admin_status: str
+    operational_status: str
+    raw_payload: dict[str, Any] = field(default_factory=dict)
+
+
 class OltAdapter(ABC):
     """Contrato comum  entre vendor adapters e o mock."""
 
@@ -137,3 +214,28 @@ class OltAdapter(ABC):
         Mesma sessão SSH usada por list_unprovisioned_onus pode cobrir este método.
 
         olt_id passa como contexto para logs; adapter não consulta o banco."""
+
+    @abstractmethod
+    def provision_onu(
+        self, config: OltConnectionConfig, plan: ProvisioningPlan, *, olt_id: UUID
+    ) -> ProvisioningResult:
+        """Executa a sequência de comandos de provisionamento na ordem do plano.
+
+        O adapter apenas envia plan.commands[].rendered respeitando timeout_ms e
+        devolve um StepResult por comando. Não resolve template, não toca banco,
+        não trunca saída. olt_id é contexto de log."""
+
+    @abstractmethod
+    def deprovision_onu(
+        self, config: OltConnectionConfig, plan: ProvisioningPlan, *, olt_id: UUID
+    ) -> ProvisioningResult:
+        """Executa a sequência de comandos de desprovisionamento (ou rollback)."""
+
+    @abstractmethod
+    def get_onu_state(
+        self, config: OltConnectionConfig, locator: OnuLocator, *, olt_id: UUID
+    ) -> OnuState:
+        """Lê o estado atual da ONU no equipamento (admin/operational).
+
+        Usado para confirmar que a ONU ficou autorizada e operacional após o
+        provisionamento. olt_id é contexto de log."""
