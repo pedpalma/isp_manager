@@ -20,8 +20,13 @@ from app.adapters.olt.base import (
     DiscoveryResult,
     OltAdapter,
     OltConnectionConfig,
+    OnuLocator,
+    OnuState,
     OpticalReading,
     OpticalReadingResult,
+    ProvisioningPlan,
+    ProvisioningResult,
+    StepResult,
 )
 
 # Storage in_process.
@@ -29,6 +34,10 @@ from app.adapters.olt.base import (
 _CANNED: dict[UUID, list[dict[str, Any]]] = {}
 # !Canned data para list_optical_readings.
 _CANNED_OPTICAL: dict[UUID, list[dict[str, Any]]] = {}
+# !Canned data para provision_onu / deprovision_onu.
+_CANNED_PROVISIONING: dict[UUID, dict[str, Any]] = {}
+# !Canned data para get_onu_state.
+_CANNED_ONU_STATE: dict[UUID, dict[str, Any]] = {}
 
 
 def set_canned_discovery(olt_id: UUID, items: list[dict[str, Any]]) -> None:
@@ -59,11 +68,52 @@ def clear_canned_optical_readings(olt_id: UUID) -> None:
     _CANNED_OPTICAL.pop(olt_id, None)
 
 
+def set_canned_provisioning(
+    olt_id: UUID,
+    steps: list[dict[str, Any]],
+    *,
+    overall_success: bool | None = None,
+) -> None:
+    """Helper de teste: injeta o resultado que provision_onu e deprovision_onu
+    devolvem para esta OLT.
+
+    Cada item de steps é um dict com chaves opcionais: command_sent,
+    output_received, parser_output, success, duration_ms. overall_success, se
+    omitido (None), é calculado como all(step.success). Passe overall_success
+    explícito para simular um vendor que decide o resultado terminal por conta própria."""
+    _CANNED_PROVISIONING[olt_id] = {
+        "steps": list(steps),
+        "overall_success": overall_success,
+    }
+
+
+def clear_canned_provisioning(olt_id: UUID | None = None) -> None:
+    """Limpa provisionamento canned. Sem argumento, limpa tudo."""
+    if olt_id is None:
+        _CANNED_PROVISIONING.clear()
+    else:
+        _CANNED_PROVISIONING.pop(olt_id, None)
+
+
+def set_canned_onu_state(olt_id: UUID, state: dict[str, Any]) -> None:
+    """Helper de teste: injeta o OnuState que get_onu_state devolve para esta
+    OLT. Chaves: admin_status, operational_status e opcionalmente raw_payload."""
+    _CANNED_ONU_STATE[olt_id] = dict(state)
+
+
+def clear_canned_onu_state(olt_id: UUID | None = None) -> None:
+    """Limpa estado canned. Sem argumento, limpa tudo."""
+    if olt_id is None:
+        _CANNED_ONU_STATE.clear()
+    else:
+        _CANNED_ONU_STATE.pop(olt_id, None)
+
+
 class MockOltAdapter(OltAdapter):
     def list_unprovisioned_onus(
         self, config: OltConnectionConfig, *, olt_id: UUID
     ) -> DiscoveryResult:
-        # config eh deliberadamente ignorado no mock; mantemos a
+        # config é deliberadamente ignorado no mock; mantemos a
         # assinatura para honrar o contrato da ABC.
         del config
         raw_items = _CANNED.get(olt_id, [])
@@ -125,6 +175,72 @@ class MockOltAdapter(OltAdapter):
         )
         return OpticalReadingResult(readings=readings, command_logs=[command_log])
 
+    def provision_onu(
+        self, config: OltConnectionConfig, plan: ProvisioningPlan, *, olt_id: UUID
+    ) -> ProvisioningResult:
+        del config
+        return self._run_plan(plan, olt_id)
+
+    def deprovision_onu(
+        self, config: OltConnectionConfig, plan: ProvisioningPlan, *, olt_id: UUID
+    ) -> ProvisioningResult:
+        del config
+        return self._run_plan(plan, olt_id)
+
+    def get_onu_state(
+        self, config: OltConnectionConfig, locator: OnuLocator, *, olt_id: UUID
+    ) -> OnuState:
+        del config
+        canned = _CANNED_ONU_STATE.get(olt_id)
+        if canned is not None:
+            return OnuState(
+                admin_status=canned.get("admin_status", "active"),
+                operational_status=canned.get("operational_status", "online"),
+                raw_payload=canned.get("raw_payload", {"mock": True}),
+            )
+        # Sem canned: sucesso silencioso, mesma postura do list_unprovisioned_onus.
+        return OnuState(
+            admin_status="active",
+            operational_status="online",
+            raw_payload={"mock": True, "locator_serial": locator.serial},
+        )
+
     def health(self, config: OltConnectionConfig) -> bool:
         del config
         return True
+
+    def _run_plan(self, plan: ProvisioningPlan, olt_id: UUID) -> ProvisioningResult:
+        """Núcleo compartilhado por provision_onu e deprovision_onu.
+
+        Com canned: devolve exatamente os StepResult injetados e o
+        overall_success calculado (all(success) quando não for explícito).
+        Sem canned: ecoa o plano (um StepResult de sucesso por comando),
+        postura equivalente ao sucesso silencioso do list_unprovisioned_onus."""
+        canned = _CANNED_PROVISIONING.get(olt_id)
+        if canned is not None:
+            steps = [
+                StepResult(
+                    command_sent=s.get("command_sent", ""),
+                    output_received=s.get("output_received"),
+                    parser_output=s.get("parser_output"),
+                    success=s.get("success", True),
+                    duration_ms=s.get("duration_ms", 1),
+                )
+                for s in canned["steps"]
+            ]
+            overall = canned["overall_success"]
+            if overall is None:
+                overall = all(s.success for s in steps)
+            return ProvisioningResult(steps=steps, overall_success=overall)
+        # Sem canned: ecoa cada comando do plano como um passo bem-sucedido.
+        steps = [
+            StepResult(
+                command_sent=cmd.rendered,
+                output_received="<mock> ok",
+                parser_output=None,
+                success=True,
+                duration_ms=1,
+            )
+            for cmd in plan.commands
+        ]
+        return ProvisioningResult(steps=steps, overall_success=True)
