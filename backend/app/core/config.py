@@ -212,11 +212,26 @@ class OpticalSettings(BaseSettings):
     )
 
     # Idade além da qual um collection_job em 'running' e considerado
-    # stale e marcado failed por detect_stale_jobs (P-M16 mitigation,
-    # D17.10). Default conservador: 10 minutos.
+    # stale e marcado failed por detect_stale_jobs. Default conservador: 10 minutos.
     stale_job_threshold_minutes: int = Field(
         default=10,
         alias="COLLECTION_STALE_JOB_THRESHOLD_MINUTES",
+    )
+
+
+class ProvisioningSettings(BaseSettings):
+    """Configurações do domínio provisioning."""
+
+    model_config = _COMMON_CONFIG
+
+    # TTL do cache in-process de normalized_command resolvidos.
+    # Mesmo racional do threshold_cache: resolve por chave
+    # (manufacturer, olt_model, command_key, version_constraint),
+    # sem invalidação ativa. Stale aceitável de até 60s após mudança
+    # do catálogo de comandos.
+    command_cache_ttl_seconds: int = Field(
+        default=60,
+        alias="PROVISIONING_COMMAND_CACHE_TTL_SECONDS",
     )
 
 
@@ -239,6 +254,7 @@ class Settings(BaseSettings):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     collection: CollectionSettings = Field(default_factory=CollectionSettings)
     optical: OpticalSettings = Field(default_factory=OpticalSettings)
+    provisioning: ProvisioningSettings = Field(default_factory=ProvisioningSettings)
 
 
 # Instância única exposta no módulo. Instanciada no import: se faltar variável
