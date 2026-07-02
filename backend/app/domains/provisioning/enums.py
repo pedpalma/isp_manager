@@ -38,3 +38,52 @@ class NormalizedCommandType(str, Enum):  # noqa: UP042
     PROVISION = "provision"
     DEPROVISION = " deprovision"
     CONFIG = "config"
+
+
+class ProvisioningStatus(str, Enum):  # noqa: UP042
+    """Estados de provisioning_order."""
+
+    PENDING = "pending"
+    VALIDATING = "validating"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    ROLLED_BACK = "rolled_back"
+    PARTIAL = "partial"
+
+
+class RollBackStatus(str, Enum):  # noqa: UP042
+    """Status  de provisioning_rollback."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+
+
+class StepPhase(str, Enum):  # noqa: UP042
+    """Fases de execução."""
+
+    VALIDATION = "validation"
+    EXECUTION = "execution"
+    VERIFY = "verify"
+
+
+# Estados considerados "ativos" para bloquear uma nova ordem sobre a mesma ONU.
+ACTIVE_PROVISIONING_STATUSES: frozenset[ProvisioningStatus] = frozenset(
+    {
+        ProvisioningStatus.PENDING,
+        ProvisioningStatus.VALIDATING,
+        ProvisioningStatus.RUNNING,
+    }
+)
+
+# Estados terminais. Serve como sanity check no worker.
+TERMINAL_PROVISIONING_STATUSES: frozenset[ProvisioningStatus] = frozenset(
+    {
+        ProvisioningStatus.SUCCESS,
+        ProvisioningStatus.FAILED,
+        ProvisioningStatus.ROLLED_BACK,
+        ProvisioningStatus.PARTIAL,
+    }
+)
