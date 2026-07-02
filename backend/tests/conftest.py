@@ -86,7 +86,7 @@ PYTEST_PREFIX = "pytest-"
 
 def _try_inventory_cleanup() -> None:
     """Best-effort: deleta registros com prefixo `pytest-` em toda a pilha.
-    Ordem: optical -> collection -> auth -> inventory.
+    Ordem: optical -> provisioning -> collection -> auth -> inventory.
     Silencioso em qualquer erro (banco fora, schema inexistente, etc.)."""
     try:
         from sqlalchemy import create_engine, text  # noqa: PLC0415
@@ -138,7 +138,50 @@ def _try_inventory_cleanup() -> None:
                 # entre testes se não limpar tudo.
                 conn.execute(text("DELETE FROM optical_threshold_policy"))
 
-                # provisioning
+                # provisioning - ORDEM DE DEPENDÊNCIA:
+                # rollback -> step -> order -> normalized_command -> template.
+                # provisioning_rollback e provisioning_step referenciam
+                # provisioning_order; provisioning_step tem ON DELETE CASCADE
+                # mas removemos explicitamente por clareza e simetria.
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM provisioning_rollback
+                        WHERE provisioning_order_id IN (
+                            SELECT po.provisioning_order_id
+                            FROM provisioning_order po
+                            JOIN olt ol ON ol.olt_id = po.olt_id
+                            WHERE ol.name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM provisioning_step
+                        WHERE provisioning_order_id IN (
+                            SELECT po.provisioning_order_id
+                            FROM provisioning_order po
+                            JOIN olt ol ON ol.olt_id = po.olt_id
+                            WHERE ol.name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
+                    text(
+                        """
+                        DELETE FROM provisioning_order
+                        WHERE olt_id IN (
+                            SELECT olt_id FROM olt WHERE name LIKE :p
+                        )
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
                 conn.execute(
                     text(
                         """
@@ -390,6 +433,27 @@ def _optical_policy_cleanup_per_test():
     yield
     # Pos-test: não limpa de novo. A próxima invocação desta fixture
     # cuida disso. Evita custo duplicado.
+
+
+@pytest.fixture(autouse=True)
+def _provisioning_command_cache_reset():
+    """Zera o cache in-process de normalized_command entre testes.
+
+    O worker mantém um singleton de módulo (_COMMAND_CACHE) com TTL 60s.
+    Sem reset, um teste que cacheia comando de outra OLT/manufacturer
+    pode influenciar um teste subsequente que espere resolução do zero.
+
+    Best-effort: se o módulo não existir (test unit sem app carregada),
+    silencioso."""
+    try:
+        from app.domains.provisioning.services import (  # noqa: PLC0415
+            provisioning_worker,
+        )
+
+        provisioning_worker._COMMAND_CACHE.clear()
+    except Exception:
+        pass
+    yield
 
 
 @pytest.fixture(scope="session")
