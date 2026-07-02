@@ -52,7 +52,7 @@ class ProvisioningStatus(str, Enum):  # noqa: UP042
     PARTIAL = "partial"
 
 
-class RollBackStatus(str, Enum):  # noqa: UP042
+class RollbackStatus(str, Enum):  # noqa: UP042
     """Status  de provisioning_rollback."""
 
     PENDING = "pending"
