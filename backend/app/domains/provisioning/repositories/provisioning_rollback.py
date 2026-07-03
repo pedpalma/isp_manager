@@ -16,7 +16,9 @@ class ProvisioningRollbackRepository:
         self._session = session
 
     async def get_for_order(self, provisioning_order_id: UUID) -> ProvisioningRollback | None:
-        """Recupera o rollback (0 ou 1) associado à ordem."""
+        """Recupera o rollback (0 ou 1) associado à ordem.
+        V1 usa order_by created_at DESC + limit(1) como safety
+        net caso algum caminho no futuro grave duplicado."""
         stmt = (
             select(ProvisioningRollback)
             .where(ProvisioningRollback.provisioning_order_id == provisioning_order_id)
