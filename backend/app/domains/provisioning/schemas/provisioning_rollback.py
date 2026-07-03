@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 from app.domains.provisioning.enums import RollbackStatus
 
 
-class ProvisioningRollBackRead(BaseModel):
+class ProvisioningRollbackRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     provisioning_rollback_id: UUID
