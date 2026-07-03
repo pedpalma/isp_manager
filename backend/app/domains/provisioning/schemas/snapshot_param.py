@@ -45,3 +45,39 @@ class SnapshotParams(BaseModel):
         max_length=128,
         description="ID do cliente no ERP externo (IXC futuro). Opcional no V1.",
     )
+
+
+class SnapshotStored(BaseModel):
+    """Snapshot gravada pelo JSONB provisioning_order.snapshot_params"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Ingest
+    line_profile_id: UUID
+    service_profile_id: UUID
+    vlan_id: UUID
+    onu_index: int = Field(ge=1, le=128)
+    custom_id: str = Field(min_length=1, max_length=64)
+    external_costumer_id: str | None = Field(default=None, max_length=128)
+
+    # Denormalizações
+    serial: str = Field(
+        min_length=1,
+        max_length=64,
+        description="Serial da ONU alvo.",
+    )
+    vlan_number: int = Field(
+        ge=1,
+        le=4094,
+        description="Número da VLAN denormalizado.",
+    )
+    line_profile_name: str = Field(
+        min_length=1,
+        max_length=255,
+        description="Nome do line_profile denormalizado.",
+    )
+    service_profile_name: str = Field(
+        min_length=1,
+        max_length=255,
+        description="Nome do service_profile denormalizado.",
+    )
