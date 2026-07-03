@@ -58,7 +58,7 @@ class SnapshotStored(BaseModel):
     vlan_id: UUID
     onu_index: int = Field(ge=1, le=128)
     custom_id: str = Field(min_length=1, max_length=64)
-    external_costumer_id: str | None = Field(default=None, max_length=128)
+    external_customer_id: str | None = Field(default=None, max_length=128)
 
     # Denormalizações
     serial: str = Field(
