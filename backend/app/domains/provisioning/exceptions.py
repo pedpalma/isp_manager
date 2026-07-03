@@ -131,3 +131,110 @@ class TemplateScopeMismatch(ValidationError):
             "raw_template.scope diverge de template_scope.",
             details={"template_scope": column_scope, "raw_template_scope": json_scope},
         )
+
+
+class ProvisioningOrderNotFound(NotFoundError):
+    def __init__(self, provisioning_order_id: UUID) -> None:
+        super().__init__(
+            f"Ordem de provisionamento não encontrada: {provisioning_order_id}.",
+            details={"provisioning_order_id": str(provisioning_order_id)},
+        )
+
+
+class ProvisioningOrderIdempotencyConflict(ConflictError):
+    def __init__(self, idempotency_key: str) -> None:
+        super().__init__(
+            f"Já existe ordem com idempotency_key '{idempotency_key}'.",
+            details={"idempotency_key": idempotency_key},
+        )
+
+
+class ProvisioningOrderActiveConflict(ConflictError):
+    """Cobre uq_prov_order_active_unique do 0007 (índice parcial em onu_id
+    WHERE status IN ('pending','validating','running'))."""
+
+    def __init__(self, onu_id: UUID) -> None:
+        super().__init__(
+            "Já existe ordem ativa para esta ONU (pendente, validando ou executando).",
+            details={"onu_id": str(onu_id)},
+        )
+
+
+class ProvisioningTemplateReferenceInvalid(BadRequestError):
+    def __init__(self, provisioning_template_id: UUID, *, reason: str) -> None:
+        super().__init__(
+            f"Template de provisionamento inválido: {reason}.",
+            details={
+                "provisioning_template_id": str(provisioning_template_id),
+                "reason": reason,
+            },
+        )
+
+
+class PonPortReferenceInvalid(BadRequestError):
+    """Usado quando pon_port não existe OU não pertence à olt_id da ordem."""
+
+    def __init__(self, pon_port_id: UUID, *, reason: str) -> None:
+        super().__init__(
+            f"pon_port inválida: {reason}.",
+            details={"pon_port_id": str(pon_port_id), "reason": reason},
+        )
+
+
+class LineProfileReferenceInvalid(BadRequestError):
+    def __init__(self, line_profile_id: UUID, *, reason: str) -> None:
+        super().__init__(
+            f"line_profile inválido: {reason}.",
+            details={"line_profile_id": str(line_profile_id), "reason": reason},
+        )
+
+
+class ServiceProfileReferenceInvalid(BadRequestError):
+    def __init__(self, service_profile_id: UUID, *, reason: str) -> None:
+        super().__init__(
+            f"service_profile inválido: {reason}.",
+            details={"service_profile_id": str(service_profile_id), "reason": reason},
+        )
+
+
+class VlanReferenceInvalid(BadRequestError):
+    def __init__(self, vlan_id: UUID, *, reason: str) -> None:
+        super().__init__(
+            f"vlan inválida: {reason}.",
+            details={"vlan_id": str(vlan_id), "reason": reason},
+        )
+
+
+class SerialNotRecognized(BadRequestError):
+    def __init__(self, serial: str) -> None:
+        super().__init__(
+            (
+                f"Serial não reconhecido: '{serial}'. Serial precisa existir em "
+                "onu (viva) ou em pending_onu (state != 'resolved')."
+            ),
+            details={"serial": serial},
+        )
+
+
+class OnuIndexConflict(BadRequestError):
+    """Já existe outra ONU viva na mesma PON usando o onu_index solicitado."""
+
+    def __init__(self, *, pon_port_id: UUID, onu_index: int, existing_onu_id: UUID) -> None:
+        super().__init__(
+            f"onu_index {onu_index} já está em uso na PON por outra ONU.",
+            details={
+                "pon_port_id": str(pon_port_id),
+                "onu_index": onu_index,
+                "existing_onu_id": str(existing_onu_id),
+            },
+        )
+
+
+class RetryOfOrderInvalid(BadRequestError):
+    """retry_of_order_id inexistente ou apontando para ordem em estado não terminal."""
+
+    def __init__(self, retry_of_order_id: UUID, *, reason: str) -> None:
+        super().__init__(
+            f"retry_of_order_id inválido: {reason}.",
+            details={"retry_of_order_id": str(retry_of_order_id), "reason": reason},
+        )
