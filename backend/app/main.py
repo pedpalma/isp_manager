@@ -31,6 +31,7 @@ from app.api.v1.routes import (
     optical_threshold_policies,
     pending_onus,
     pon_ports,
+    provisioning_orders,
     provisioning_templates,
     service_profiles,
     slots,
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
     app.include_router(optical_threshold_policies.router, prefix="/api/v1")
     app.include_router(provisioning_templates.router, prefix="/api/v1")
     app.include_router(normalized_commands.router, prefix="/api/v1")
+    app.include_router(provisioning_orders.router, prefix="/api/v1")
 
     return app
 
