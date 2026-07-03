@@ -35,9 +35,7 @@ class ProvisioningOrderRepository:
 
     async def get_by_idempotency_key(self, idempotency_key: str) -> ProvisioningOrder | None:
         """Pré-check 409 antes de bater o índice único"""
-        stmt = select(ProvisioningOrder).where(
-            ProvisioningOrder.idempotency_key == idempotency_key,
-        )
+        stmt = select(ProvisioningOrder).where(ProvisioningOrder.idempotency_key == idempotency_key)
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
