@@ -34,9 +34,9 @@ class TemplateStepFailPolicy(str, Enum):  # noqa: UP042
 class NormalizedCommandType(str, Enum):  # noqa: UP042
     """Categoria semântica de normalized_command"""
 
-    READ = " read"
+    READ = "read"
     PROVISION = "provision"
-    DEPROVISION = " deprovision"
+    DEPROVISION = "deprovision"
     CONFIG = "config"
 
 

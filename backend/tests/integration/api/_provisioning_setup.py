@@ -1,6 +1,6 @@
 # Helpers compartilhados para testes de integração do domínio provisioning.
 
-# Oos recursos criados usam prefixo pytest- para que o cleanup do conftest
+# Os recursos criados usam prefixo pytest- para que o cleanup do conftest
 # remova sem tocar em dados semeados.
 
 from __future__ import annotations
@@ -25,12 +25,16 @@ def make_raw_template(
     params_schema: dict[str, Any] | None = None,
     version: str = "1",
 ) -> dict[str, Any]:
-    """Gera um raw_template válido para reuso nos testes."""
+    """Gera um raw_template válido para reuso nos testes.
+
+    phase="execute": TemplateStepPhase aceita apenas 'execute' e 'verify' hoje
+    (current_state.md linha 261 fala em 'execution'; a doc está desatualizada,
+    o enum é a fonte de verdade)."""
     if steps is None:
         steps = [
             {
                 "step_key": "authorize_onu",
-                "phase": "execution",
+                "phase": "execute",
                 "command_key": "authorize_onu",
                 "fail_policy": "abort",
             }
@@ -84,6 +88,8 @@ def setup_full_provisioning_chain(real_client, headers: dict[str, str]) -> dict[
     inv = setup_inventory(real_client, headers)
 
     # line_profile
+    # LineProfileCreate exige upstream_bandwidth/downstream_bandwidth como
+    # strings livres (rótulos de perfil), não download_kbps/upload_kbps.
     line_name = _unique("lp")
     r = real_client.post(
         f"{API}/line-profiles",
@@ -91,8 +97,8 @@ def setup_full_provisioning_chain(real_client, headers: dict[str, str]) -> dict[
         json={
             "olt_id": str(inv["olt_id"]),
             "name": line_name,
-            "download_kbps": 100000,
-            "upload_kbps": 50000,
+            "upstream_bandwidth": "50M",
+            "downstream_bandwidth": "100M",
             "active": True,
         },
     )
@@ -155,6 +161,7 @@ def setup_full_provisioning_chain(real_client, headers: dict[str, str]) -> dict[
                 "manufacturer_id": str(inv["manufacturer_id"]),
                 "olt_model_id": str(inv["olt_model_id"]),
                 "command_key": step["command_key"],
+                "command_type": "provision",
                 "template_string": f"echo pytest-{step['command_key']}",
                 "timeout_ms": 5000,
                 "requires_privileged": False,
@@ -172,6 +179,7 @@ def setup_full_provisioning_chain(real_client, headers: dict[str, str]) -> dict[
                 "manufacturer_id": str(inv["manufacturer_id"]),
                 "olt_model_id": str(inv["olt_model_id"]),
                 "command_key": rollback_cmd,
+                "command_type": "deprovision",
                 "template_string": f"echo pytest-rollback-{rollback_cmd}",
                 "timeout_ms": 5000,
                 "requires_privileged": False,
