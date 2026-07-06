@@ -1,4 +1,4 @@
-# Service do ProvisioningOrder.
+# Service do ProvisioningOrder (M18d).
 
 from __future__ import annotations
 
@@ -79,8 +79,9 @@ def _violated_constraint(orig: str) -> str | None:
 
 
 # Estados de pending_onu considerados ainda ativos para o reconhecimento de serial.
-# Ver enum PendingOnuState em app/domains/collection/enums.py.
-_ACTIVE_PENDING_ONU_STATES = ("detected", "waiting", "waiting_approval")
+# Ver DDL pending_onu_state_enum: valores existentes são detected, waiting, resolved.
+# Ativos = tudo menos resolved.
+_ACTIVE_PENDING_ONU_STATES = ("detected", "waiting")
 
 
 class ProvisioningOrderService:
@@ -153,13 +154,11 @@ class ProvisioningOrderService:
 
         Ordem das validações: barato -> caro. O serial e a colisão de onu_index
         vêm por último (2 queries) para não pagar quando a ordem já quebra em
-        pré-check simples."""
-        if actor.actor_id is None:
-            raise ProvisioningTemplateReferenceInvalid(
-                payload.provisioning_template_id,
-                reason="actor sem app_user_id (rota exige require_admin)",
-            )
+        pré-check simples.
 
+        O actor chega SEMPRE com actor_id populado porque a rota exige
+        require_admin (CurrentUser.to_actor()). Sem guard defensivo aqui.
+        """
         # V0 (pré-check amigável): idempotency_key
         existing_by_key = await self._repo.get_by_idempotency_key(payload.idempotency_key)
         if existing_by_key is not None:
