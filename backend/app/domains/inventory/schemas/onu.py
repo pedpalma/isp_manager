@@ -57,10 +57,10 @@ class OnuCreate(BaseModel):
 
     @field_validator("serial", mode="before")
     @classmethod
-    def _strip_serial(cls, v: object) -> object:
-        # Strip ANTES da checagem de tamanho (mode="before"): " ab " não passa
-        # como serial válido só por causa dos espaços.
-        return v.strip() if isinstance(v, str) else v
+    def _normalize_serial(cls, v: object) -> object:
+        # Strip + upper ANTES da checagem de tamanho (mode="before").
+        # Unifica em UPPER case e sem espaços.
+        return v.strip().upper() if isinstance(v, str) else v
 
 
 class OnuUpdate(BaseModel):
