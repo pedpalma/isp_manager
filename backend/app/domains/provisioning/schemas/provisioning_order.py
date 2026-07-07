@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domains.provisioning.enums import ProvisioningStatus
 from app.domains.provisioning.schemas.provisioning_rollback import (
@@ -36,6 +36,12 @@ class ProvisioningOrderCreate(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=128)
     retry_of_order_id: UUID | None = None
     snapshot: SnapshotParams
+
+    @field_validator("serial", mode="before")
+    @classmethod
+    def _normalize_serial(cls, v: object) -> object:
+        # Strip + upper, evita divergência de case entre a ordem e ONU alvo.
+        return v.strip().upper() if isinstance(v, str) else v
 
 
 class ProvisioningOrderRead(BaseModel):
