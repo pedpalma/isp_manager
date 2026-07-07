@@ -24,7 +24,7 @@ class OltCommandProfileCreate(BaseModel):
         description="OLT model do catálogo. Precisa existir e estar ativo.",
     )
 
-    firmware_version: UUID = Field(
+    firmware_version: str = Field(
         min_length=_FIRMWARE_MIN,
         max_length=_FIRMWARE_MAX,
         description="Versão de firmware. Rótulo livre.",
