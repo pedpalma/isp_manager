@@ -34,8 +34,14 @@ class OltCommandProfileCreate(BaseModel):
         description="Protocolo de acesso deste perfil.",
     )
     version_constraint: str | None = Field(
+        default=None,
+        max_length=_VERSION_CONSTRAINT_MAX,
+        description="Regra semântica de versão.",
+    )
+    parser_profile: str | None = Field(
+        default=None,
         max_length=_PARSER_PROFILE_MAX,
-        description="Identificador do conjunto de parsers desta combinação.",
+        description="Identificador do conjunto de parsers dessa combinação.",
     )
     active: bool = Field(
         default=True,
