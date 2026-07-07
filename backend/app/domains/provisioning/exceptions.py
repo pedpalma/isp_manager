@@ -238,3 +238,32 @@ class RetryOfOrderInvalid(BadRequestError):
             f"retry_of_order_id inválido: {reason}.",
             details={"retry_of_order_id": str(retry_of_order_id), "reason": reason},
         )
+
+
+class OltCommandProfileNotFound(NotFoundError):
+    def __init__(self, olt_command_profile_id: UUID) -> None:
+        super().__init__(
+            f"Perfil de comando OLT não encontrado: {olt_command_profile_id}.",
+            details={"olt_command_profile_id": str(olt_command_profile_id)},
+        )
+
+
+class OltCommandProfileConflict(ConflictError):
+    """Cobre a unicidade TOTAL de uq_olt_command_profile"""
+
+    def __init__(
+        self,
+        *,
+        olt_model_id: UUID,
+        firmware_version: str,
+        access_protocol: str,
+    ) -> None:
+        super().__init__(
+            "Já existe um perfil de comando OLT com a mesma combinação de "
+            "modelo, firmware e protocolo.",
+            details={
+                "olt_model_id": str(olt_model_id),
+                "firmware_version": firmware_version,
+                "access_protocol": access_protocol,
+            },
+        )
