@@ -306,6 +306,8 @@ def _upsert_pending_onu(
     de resolução."""
     import json
 
+    normalized_serial = serial.strip().upper()
+
     stmt = text(
         """
         INSERT INTO pending_onu (
@@ -330,7 +332,7 @@ def _upsert_pending_onu(
         {
             "olt_id": str(olt_id),
             "pon_port_id": str(pon_port_id),
-            "serial": serial,
+            "serial": normalized_serial,
             "vendor_id": vendor_id,
             "pon_position": pon_position,
             "raw_payload": json.dumps(raw_payload) if raw_payload is not None else None,
