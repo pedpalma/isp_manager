@@ -378,6 +378,19 @@ def _try_inventory_cleanup() -> None:
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
                 conn.execute(
+                    text(
+                        """
+                        DELETE FROM olt_command_profile
+                        WHERE olt_model_id IN (
+                        SELECT om.olt_model_id
+                        FROM olt_model om
+                        JOIN manufacturer m ON m.manufacturer_id = om.manufacturer_id
+                        WHERE m.slug LIKE :p)
+                        """
+                    ),
+                    {"p": f"{PYTEST_PREFIX}%"},
+                )
+                conn.execute(
                     text("DELETE FROM olt_model WHERE model LIKE :p"),
                     {"p": f"{PYTEST_PREFIX}%"},
                 )
