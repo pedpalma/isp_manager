@@ -1,28 +1,5 @@
 # Worker síncrono do ciclo de provisionamento de ONUs.
 
-# Executado dentro do Celery worker via app.tasks.provisioning.run_provisioning_order.
-# Usa sessão SÍNCRONA (psycopg), NÃO a async da API. Fluxo distinto do
-# service da API.
-
-# Fluxo em fases isoladas, cada fase em sua transação:
-
-# Fase 1 (TX1): advisory lock por olt_id + SELECT FOR UPDATE da ordem
-# + carrega olt/credencial/template + valida
-# snapshot_params contra params_schema + resolve command_keys via cache +
-# marca ordem como 'validating'. Falhas aqui NUNCA chegam a tocar SSH.
-
-# Fase 2 (sem DB): adapter.provision_onu(config, plan, olt_id). O adapter
-# é puro: sem acesso a DB, sem resolução de secret, sem
-# truncamento.
-
-# Fase 3 (TX2): grava provisioning_step por StepResult + decide status
-# final:
-# * todos success => SUCCESS
-# * abort failure(s) => dispara rollback (fase 4)
-# * apenas continue failure(s) => PARTIAL
-# * verify fase disponível como fase 5 (get_onu_state) que registra
-# * snapshot no result_summary
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -110,6 +87,7 @@ class _LoadedContext:
     plan: ProvisioningPlan
     rollback_command_keys: dict[str, str]
     step_key_by_order: dict[int, str]
+    manufacturer_slug: str | None
 
 
 def _truncate(value: str | None) -> str | None:
@@ -126,10 +104,7 @@ def _utcnow() -> datetime:
 
 # Ponto de entrada chamado pela task Celery.
 def run_provisioning_order_sync(order_id: UUID) -> None:
-    """Executa o ciclo completo. Nunca propaga exception.
-
-    Falhas viram order.status=FAILED (ou ROLLED_BACK se rollback OK) com
-    failure_reason preservado."""
+    """Executa o ciclo completo. Nunca propaga exception."""
     log.info("provisioning.worker.started", provisioning_order_id=str(order_id))
 
     # Fase 1: lock + load + validate + marca validating.
@@ -146,8 +121,6 @@ def run_provisioning_order_sync(order_id: UUID) -> None:
         _mark_failed(order_id, f"phase1: {exc}")
         return
     except _ValidationFailure as exc:
-        # Validação já persistiu step com success=false e marcou o status
-        # FAILED dentro da própria TX1. Só loga aqui.
         log.warning(
             "provisioning.worker.validation_failed",
             provisioning_order_id=str(order_id),
@@ -163,10 +136,9 @@ def run_provisioning_order_sync(order_id: UUID) -> None:
         _mark_failed(order_id, f"phase1: {exc}")
         return
 
-    # Fase 2: chama adapter (sem DB).
     try:
         _mark_running(ctx.order_id)  # transição validating -> running
-        adapter = get_olt_adapter()
+        adapter = get_olt_adapter(manufacturer_slug=ctx.manufacturer_slug)
         result = adapter.provision_onu(
             ctx.connection_config,
             ctx.plan,
@@ -177,6 +149,7 @@ def run_provisioning_order_sync(order_id: UUID) -> None:
             "provisioning.worker.phase2_failed",
             provisioning_order_id=str(order_id),
             olt_id=str(ctx.olt_id),
+            manufacturer_slug=ctx.manufacturer_slug,
             error=str(exc),
         )
         _mark_failed(order_id, f"phase2: {exc}")
@@ -239,6 +212,7 @@ def _phase_load_lock_and_validate(order_id: UUID) -> _LoadedContext:
                 raise _ValidationFailure("snapshot_params ausente de: " + ", ".join(missing))
 
             olt_model_id = _load_olt_model_id(db, olt.olt_model_id)
+            manufacturer_slug = _load_manufacturer_slug_by_olt_model(db, olt_model_id)
             manufacturer_id = template.manufacturer_id
             version_constraint = raw.get("version_constraint")
 
@@ -300,10 +274,9 @@ def _phase_load_lock_and_validate(order_id: UUID) -> _LoadedContext:
                 plan=plan,
                 rollback_command_keys=rollback_command_keys,
                 step_key_by_order=step_key_by_order,
+                manufacturer_slug=manufacturer_slug,
             )
         except _ValidationFailure as vf:
-            # Persiste FAILED na mesma sessão. Sem re-raise aqui, para o
-            # session_scope commitar. A exception é relançada FORA do with.
             validation_error = str(vf)
             _mark_validation_failure_in_session(
                 db,
@@ -355,10 +328,26 @@ def _load_active_template(db: Session, template_id: UUID) -> ProvisioningTemplat
 def _load_olt_model_id(db: Session, olt_model_id: UUID | None) -> UUID | None:
     if olt_model_id is None:
         return None
-    # Sanity: garante que o olt_model está ativo. Não bloqueia se inativo;
-    # apenas usa o ID (cache pode ter valor válido do passado).
     stmt = select(OltModel.olt_model_id).where(OltModel.olt_model_id == olt_model_id)
     return db.execute(stmt).scalar_one_or_none()
+
+
+def _load_manufacturer_slug_by_olt_model(db: Session, olt_model_id: UUID | None) -> str | None:
+    """Resolve o slug do manufacturer a partir do olt_model_id."""
+    if olt_model_id is None:
+        return None
+    row = db.execute(
+        text(
+            """
+            SELECT m.slug
+            FROM olt_model om
+            JOIN manufacturer m ON m.manufacturer_id = om.manufacturer_id
+            WHERE om.olt_model_id = :olt_model_id
+            """
+        ),
+        {"olt_model_id": str(olt_model_id)},
+    ).first()
+    return row[0] if row is not None else None
 
 
 def _load_onu_serial(db: Session, onu_id: UUID) -> str | None:
@@ -367,10 +356,7 @@ def _load_onu_serial(db: Session, onu_id: UUID) -> str | None:
 
 
 def _load_slot_and_pon_indexes(db: Session, pon_port_id: UUID) -> tuple[int, int]:
-    """Resolve (slot_index, pon_index) a partir do pon_port_id.
-
-    Necessário porque OnuLocator espera índices de posição na topologia,
-    não IDs de negócio. Uma JOIN curta em pon_port + slot resolve."""
+    """Resolve (slot_index, pon_index) a partir do pon_port_id."""
     row = db.execute(
         text(
             """
@@ -391,8 +377,6 @@ def _snapshot_missing_required(
     order: ProvisioningOrder,
     raw: dict[str, Any],
 ) -> list[str]:
-    """Puro: retorna nomes de campos required do params_schema do template
-    que estão AUSENTES do snapshot_params da ordem. Não escreve no banco."""
     params_schema = raw.get("params_schema") or {}
     snapshot = order.snapshot_params or {}
     missing: list[str] = []
@@ -440,11 +424,7 @@ def _resolve_normalized_command(
     command_key: str,
     version_constraint: str | None,
 ) -> NormalizedCommandResolved | None:
-    """Cache-aside: consulta cache in-process; se miss, busca DB e cacheia.
-
-    Retorna None se não existir comando ativo correspondente. None é
-    cacheavel (evita queries repetidas para o mesmo comando ausente
-    durante a janela de TTL)."""
+    """Cache-aside: consulta cache in-process; se miss, busca DB e cacheia."""
     key: CacheKey = (manufacturer_id, olt_model_id, command_key, version_constraint)
     cached = _COMMAND_CACHE.get(key)
     if not is_miss(cached):
@@ -469,8 +449,6 @@ def _query_normalized_command(
     command_key: str,
     version_constraint: str | None,
 ) -> NormalizedCommandResolved | None:
-    """Consulta normalized_command ativo casando manufacturer + optional
-    olt_model + command_key."""
     stmt = (
         select(
             NormalizedCommand.normalized_command_id,
@@ -518,12 +496,6 @@ def _row_version_matches(
     row_version_constraint: str | None,
     requested_version_constraint: str | None,
 ) -> bool:
-    """V1: tolerante. Casa em qualquer um destes cenários:
-      * ambos NULL
-      * um dos dois NULL
-      * ambos preenchidos e iguais (string exata)
-
-    Semântica de expressão (">=1.2") fica para marco futuro."""
     if row_version_constraint is None or requested_version_constraint is None:
         return True
     return row_version_constraint == requested_version_constraint
@@ -540,26 +512,13 @@ def _build_resolved(row: Any) -> NormalizedCommandResolved:
 
 
 # Rendering do comando
-
-
 def _render_command(
     *,
     template_string: str,
     snapshot: dict[str, Any],
     command_vars: dict[str, Any],
 ) -> str:
-    """Renderiza template_string via str.format_map.
-
-    Contexto: command_vars do template (defaults do catálogo) mesclado
-    com snapshot_params da ordem (payload do operador). snapshot_params
-    tem prioridade em caso de colisão (última palavra é do payload).
-
-    ADVERTÊNCIA V1: nenhum escape vendor-específico. Se o template real
-    Fiberhome exigir escape de aspas ou caracteres especiais, o adapter
-    real deve interceptar. Registrado como.
-
-    KeyError (variável ausente no contexto) sobe como Exception genérica
-    e é capturada em fase 1 -> _ValidationFailure via caller."""
+    """Renderiza template_string via str.format_map."""
     context: dict[str, Any] = {}
     context.update(command_vars)
     context.update(snapshot)
@@ -570,8 +529,6 @@ def _render_command(
 
 
 # Marcadores de status intermediários
-
-
 def _mark_running(order_id: UUID) -> None:
     """Transição validating -> running (start real do SSH)."""
     with session_scope() as db:
@@ -589,13 +546,8 @@ def _mark_running(order_id: UUID) -> None:
 
 
 # Fase 3
-
-
 @dataclass(frozen=True, slots=True)
 class _PersistOutcome:
-    """Resultado da fase 3: o que o worker precisa saber para decidir
-    fase 4 (rollback) e status final."""
-
     needs_rollback: bool
     successful_step_orders: list[int]
     failure_reason: str | None
@@ -607,24 +559,12 @@ def _phase_persist_results(
     ctx: _LoadedContext,
     result: ProvisioningResult,
 ) -> _PersistOutcome:
-    """Grava um provisioning_step por StepResult do adapter.
-
-    Decisão de rollback: qualquer step com success=False cujo step_key
-    aparece em rollback_command_keys => needs_rollback=True. Se
-    rollback_command_keys estiver vazio ou não cobrir o step falho, cai
-    em PARTIAL (fail_policy=continue implícito por ausência de mapa).
-
-    Steps bem-sucedidos são coletados por step_order para a fase 4 usar
-    (rollback percorre em ORDEM REVERSA)."""
+    """Grava um provisioning_step por StepResult do adapter."""
     successful_orders: list[int] = []
     failed_steps: list[tuple[int, str]] = []  # (step_order, step_key)
 
     with session_scope() as db:
         for idx, step_result in enumerate(result.steps or [], start=1):
-            # StepResult não carrega command_key.
-            # A correlação com o step original é por posição no array;
-            # o ctx.step_key_by_order[idx] foi montado na fase 1 na mesma
-            # ordem que virou plan.commands.
             step_key = ctx.step_key_by_order.get(idx) or f"__pos_{idx}__"
             db.add(
                 ProvisioningStep(
@@ -682,20 +622,8 @@ def _phase_persist_results(
 
 
 # Fase 4: rollback
-
-
 def _phase_rollback(*, ctx: _LoadedContext, outcome: _PersistOutcome) -> None:
-    """Executa rollback dos steps bem-sucedidos em ordem REVERSA.
-
-    Recupera cada step_key -> rollback_command_key via ctx.rollback_command_keys,
-    resolve o comando via cache, renderiza, monta ProvisioningPlan reverso,
-    chama adapter.deprovision_onu,
-    grava provisioning_rollback com rollback_commands agregado.
-
-    Status final:
-      * rollback OK => ROLLED_BACK
-      * rollback FALHA => FAILED (failure_reason detalha step original + rollback)
-    """
+    """Executa rollback dos steps bem-sucedidos em ordem REVERSA."""
     # Reconstrói lista de PlannedCommand na ordem reversa dos sucessos.
     reversed_orders = list(reversed(outcome.successful_step_orders))
     planned_rollback: list[PlannedCommand] = []
@@ -766,8 +694,6 @@ def _phase_rollback(*, ctx: _LoadedContext, outcome: _PersistOutcome) -> None:
         return
 
     if not planned_rollback:
-        # Sem nada para reverter: transição direta para FAILED (não
-        # ROLLED_BACK, porque nenhum rollback foi de fato executado).
         _persist_rollback_row(
             order_id=ctx.order_id,
             reason=outcome.failure_reason or "step(s) falharam",
@@ -779,9 +705,9 @@ def _phase_rollback(*, ctx: _LoadedContext, outcome: _PersistOutcome) -> None:
         _mark_failed(ctx.order_id, outcome.failure_reason or "step falhou sem rollback")
         return
 
-    # Chama adapter para executar rollback.
+    # Chama adapter para executar rollback. Factory decide pelo
     rollback_plan = ProvisioningPlan(locator=ctx.locator, commands=planned_rollback)
-    adapter = get_olt_adapter()
+    adapter = get_olt_adapter(manufacturer_slug=ctx.manufacturer_slug)
     try:
         rollback_result = adapter.deprovision_onu(
             ctx.connection_config,
@@ -792,6 +718,7 @@ def _phase_rollback(*, ctx: _LoadedContext, outcome: _PersistOutcome) -> None:
         log.exception(
             "provisioning.worker.rollback_adapter_failed",
             provisioning_order_id=str(ctx.order_id),
+            manufacturer_slug=ctx.manufacturer_slug,
             error=str(exc),
         )
         _persist_rollback_row(
@@ -844,12 +771,7 @@ def _pack_rollback_commands(
     planned: list[PlannedCommand],
     steps: list[StepResult],
 ) -> list[dict[str, Any]]:
-    """Serializa list[StepResult] no shape do JSONB rollback_commands.
-
-    StepResult não carrega command_key; a correlação é por posição
-    contra a list[PlannedCommand] que foi passada ao adapter. Se por algum
-    motivo o adapter retornar mais steps do que planned (invariante
-    quebrada), os excedentes recebem step_key sintético."""
+    """Serializa list[StepResult] no shape do JSONB rollback_commands"""
     out: list[dict[str, Any]] = []
     for i, s in enumerate(steps):
         step_key = planned[i].command_key if i < len(planned) else f"__pos_{i}__"
@@ -899,8 +821,6 @@ def _get_olt_model_id_for_olt(db: Session, olt_id: UUID) -> UUID | None:
 
 
 # Finalização sem rollback
-
-
 def _finalize(order_id: UUID, outcome: _PersistOutcome) -> None:
     _mark_finished(
         order_id,
