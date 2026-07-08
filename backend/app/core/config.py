@@ -197,10 +197,8 @@ class OpticalSettings(BaseSettings):
     model_config = _COMMON_CONFIG
 
     # TTL do cache in-process de thresholds resolvidos.
-    # 60s e o sweet spot: poucas queries ao banco por job, e o stale
-    # operacional aceitável apos mudar policy.
     threshold_cache_ttl_seconds: int = Field(
-        default=60,
+        default=10,
         alias="OPTICAL_THRESHOLD_CACHE_TTL_SECONDS",
     )
 
@@ -227,10 +225,9 @@ class ProvisioningSettings(BaseSettings):
     # TTL do cache in-process de normalized_command resolvidos.
     # Mesmo racional do threshold_cache: resolve por chave
     # (manufacturer, olt_model, command_key, version_constraint),
-    # sem invalidação ativa. Stale aceitável de até 60s após mudança
-    # do catálogo de comandos.
+    # sem invalidação ativa.
     command_cache_ttl_seconds: int = Field(
-        default=60,
+        default=10,
         alias="PROVISIONING_COMMAND_CACHE_TTL_SECONDS",
     )
 
