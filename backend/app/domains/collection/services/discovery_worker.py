@@ -1,36 +1,5 @@
 # Worker síncrono do ciclo de descoberta de ONUs.
 
-# Executado dentro do worker Celery via app.tasks.collection.run_discovery_job.
-# Usa sessão SÍNCRONA (psycopg) ao invés da async (asyncpg) da API. É fluxo
-# distinto do CollectionJobService.create_discovery_job, que apenas cria
-# o job no banco e enfileira a task.
-
-# Fluxo em três fases, cada uma em sua transação:
-# *Fase 1 (TX1): advisory lock por olt_id (impede colisão entre tipos
-# diferentes de job na mesma OLT, R3/A4) -> carrega job + olt +
-# credencial via _worker_common -> constrói OltConnectionConfig ->
-# marca job como RUNNING. Lock de linha (FOR UPDATE) impede dois
-# workers de pegarem o mesmo job.
-
-# *Fase 2: chama adapter.list_unprovisioned_onus. O adapter é puro, não
-# toca banco.
-
-# *Fase 3 (TX2): grava todos os CommandLog em collection_log; resolve
-# (slot_index, pon_index) -> pon_port_id via mapa em memoria;
-# faz upsert em pending_onu sob a unicidade (olt_id, pon_port_id, serial);
-# marca job como SUCCESS ou PARTIAL.
-
-# Em caso de exception em qualquer fase:
-# TX-erro separada marca job como FAILED com error_message.
-# NUNCA propaga exception para o Celery.
-# Sem autoretry (R3): falha do job é terminal, retry é novo POST manual.
-
-# Truncamento de output_received (R8): valor > MAX_OUTPUT_LENGTH é
-# cortado e marcado com sufixo de truncamento antes da gravação.
-
-# Upsert NÃO toca state nem resolved_at: re-descoberta de
-# uma ONU ja resolvida NUNCA regride para 'detected'.
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -94,7 +63,9 @@ def run_discovery_job_sync(job_id: UUID) -> None:
 
     # Fase 1: advisory lock + carrega tudo + resolve secret + marca RUNNING.
     try:
-        connection_config, olt_id = _phase_load_and_mark_running(job_id)
+        connection_config, olt_id, manufacturer_id, manufacturer_slug = (
+            _phase_load_and_mark_running(job_id)
+        )
     except _DiscoveryAborted:
         return
     except OltLockUnavailable as exc:
@@ -114,15 +85,16 @@ def run_discovery_job_sync(job_id: UUID) -> None:
         _mark_failed(job_id, f"phase1: {exc}")
         return
 
-    # Fase 2: chama adapter.
+    # Fase 2: chama adapter. Factory decide pelo manufacturer_slug da OLT.
     try:
-        adapter = get_olt_adapter()
+        adapter = get_olt_adapter(manufacturer_slug=manufacturer_slug)
         result = adapter.list_unprovisioned_onus(connection_config, olt_id=olt_id)
     except Exception as exc:
         log.exception(
             "collection.worker.phase2_failed",
             collection_job_id=str(job_id),
             olt_id=str(olt_id),
+            manufacturer_slug=manufacturer_slug,
             error=str(exc),
         )
         _mark_failed(job_id, f"phase2: {exc}")
@@ -133,6 +105,7 @@ def run_discovery_job_sync(job_id: UUID) -> None:
         unmapped_count = _phase_persist_results(
             job_id=job_id,
             olt_id=olt_id,
+            manufacturer_id=manufacturer_id,
             command_logs=result.command_logs,
             discovered=result.discovered,
         )
@@ -158,26 +131,43 @@ def run_discovery_job_sync(job_id: UUID) -> None:
     )
 
 
-def _phase_load_and_mark_running(job_id: UUID) -> tuple[OltConnectionConfig, UUID]:
-    """Carrega job + olt + credencial, resolve segredo, marca RUNNING.
-
-    Lock de linha (FOR UPDATE) impede dois workers de avançarem se a
-    mesma task for entregue em duplicidade pelo broker. O segundo worker
-    abortará em _DiscoveryAborted (status != PENDING).
-
-    Advisory lock TRANSACIONAL por olt_id (R3/A4) impede colisão entre
-    tipos diferentes de job (discovery vs signal_reading) na mesma OLT:
-    equipamentos GPON aceitam poucas sessões SSH simultâneas, então
-    serializa-se aqui antes mesmo de chegar no equipamento."""
+def _phase_load_and_mark_running(
+    job_id: UUID,
+) -> tuple[OltConnectionConfig, UUID, UUID, str | None]:
+    """Carrega job + olt + credencial, resolve segredo, marca RUNNING."""
     with session_scope() as db:
         job = _lock_pending_job(db, job_id)
         acquire_olt_advisory_lock(db, job.olt_id)
         olt, credential = load_olt_and_credential(db, job.olt_id)
         connection_config = build_connection_config(olt, credential)
+
+        # Resolve manufacturer_id + slug da OLT em uma única query.
+        # A OLT sempre tem olt_model (FK NOT NULL) e olt_model sempre
+        # tem manufacturer (FK NOT NULL), então row nunca é None aqui;
+        # se for, é corrupção do inventário e cai como Exception genérica.
+        mfr_row = db.execute(
+            text(
+                """
+                SELECT m.manufacturer_id, m.slug
+                FROM olt o
+                JOIN olt_model om ON om.olt_model_id = o.olt_model_id
+                JOIN manufacturer m ON m.manufacturer_id = om.manufacturer_id
+                WHERE o.olt_id = :olt_id
+                """
+            ),
+            {"olt_id": str(job.olt_id)},
+        ).first()
+        if mfr_row is None:
+            raise RuntimeError(
+                f"Inventário inconsistente: olt {job.olt_id} sem manufacturer via olt_model."
+            )
+        manufacturer_id = UUID(str(mfr_row[0]))
+        manufacturer_slug = mfr_row[1]
+
         # Marca RUNNING. Commit pelo session_scope no fim do with.
         job.status = JobStatus.RUNNING
         job.started_at = _utcnow()
-        return connection_config, job.olt_id
+        return connection_config, job.olt_id, manufacturer_id, manufacturer_slug
 
 
 def _lock_pending_job(db: Session, job_id: UUID) -> CollectionJob:
@@ -205,6 +195,7 @@ def _phase_persist_results(
     *,
     job_id: UUID,
     olt_id: UUID,
+    manufacturer_id: UUID,
     command_logs: list[CommandLog],
     discovered: list[DiscoveredOnu],
 ) -> int:
@@ -217,6 +208,7 @@ def _phase_persist_results(
             return 0
 
         pon_map = _load_pon_map(db, olt_id=olt_id)
+        onu_model_map = _load_onu_model_map(db, manufacturer_id=manufacturer_id)
         unmapped = 0
         for onu in discovered:
             key = (onu.slot_index, onu.pon_index)
@@ -232,6 +224,22 @@ def _phase_persist_results(
                     pon_index=onu.pon_index,
                 )
                 continue
+
+            # Matching por vendor_id. Sem vendor_id (adapter falhou em
+            # ler, ou vendor não expõe): resolved fica None e o UPDATE
+            # preserva match anterior via COALESCE.
+            resolved_onu_model_id: UUID | None = None
+            if onu.vendor_id is not None:
+                lookup_key = onu.vendor_id.strip().upper()
+                resolved_onu_model_id = onu_model_map.get(lookup_key)
+                if resolved_onu_model_id is None:
+                    log.info(
+                        "collection.worker.vendor_id_unmatched",
+                        collection_job_id=str(job_id),
+                        olt_id=str(olt_id),
+                        vendor_id=lookup_key,
+                    )
+
             _upsert_pending_onu(
                 db,
                 olt_id=olt_id,
@@ -241,6 +249,7 @@ def _phase_persist_results(
                 pon_position=onu.pon_position,
                 raw_payload=onu.raw_payload,
                 discovery_source=f"job:{job_id}",
+                onu_model_id=resolved_onu_model_id,
             )
         return unmapped
 
@@ -288,6 +297,35 @@ def _load_pon_map(db: Session, *, olt_id: UUID) -> dict[tuple[int, int], UUID]:
     return out
 
 
+def _load_onu_model_map(db: Session, *, manufacturer_id: UUID) -> dict[str, UUID]:
+    """Mapa vendor_id (uppercase) -> onu_model_id para os modelos ativos
+    do manufacturer da OLT."""
+    stmt = text(
+        """
+        SELECT vendor_id, onu_model_id
+        FROM onu_model
+        WHERE manufacturer_id = :mfr
+        AND vendor_id IS NOT NULL
+        AND active = TRUE
+        """
+    )
+    rows = db.execute(stmt, {"mfr": str(manufacturer_id)}).all()
+    out: dict[str, UUID] = {}
+    for vendor_id, onu_model_id in rows:
+        normalized = vendor_id.strip().upper()
+        if normalized in out and out[normalized] != onu_model_id:
+            # Caso patológico: dois onu_model com o mesmo vendor_id
+            # normalizado. Não deveria ocorrer na prática (cadastro
+            # convenciona uppercase). Last-write-wins + log.
+            log.warning(
+                "collection.worker.vendor_id_ambiguous",
+                manufacturer_id=str(manufacturer_id),
+                vendor_id=normalized,
+            )
+        out[normalized] = UUID(str(onu_model_id))
+    return out
+
+
 def _upsert_pending_onu(
     db: Session,
     *,
@@ -298,12 +336,9 @@ def _upsert_pending_onu(
     pon_position: int | None,
     raw_payload: dict[str, Any] | None,
     discovery_source: str,
+    onu_model_id: UUID | None,
 ) -> None:
-    """INSERT ... ON CONFLICT (olt_id, pon_port_id, serial) DO UPDATE.
-
-    DELIBERADAMENTE NÃO toca state, resolved_at, linked_onu_id,
-    resolution_type, first_seen_at. Re-descoberta nunca regride o ciclo
-    de resolução."""
+    """INSERT ... ON CONFLICT (olt_id, pon_port_id, serial) DO UPDATE."""
     import json
 
     normalized_serial = serial.strip().upper()
@@ -312,11 +347,11 @@ def _upsert_pending_onu(
         """
         INSERT INTO pending_onu (
             olt_id, pon_port_id, serial, vendor_id, pon_position,
-            raw_payload, discovery_source,
+            raw_payload, discovery_source, onu_model_id,
             first_seen_at, last_seen_at
         ) VALUES (
             :olt_id, :pon_port_id, :serial, :vendor_id, :pon_position,
-            CAST(:raw_payload AS JSONB), :discovery_source,
+            CAST(:raw_payload AS JSONB), :discovery_source, :onu_model_id,
             NOW(), NOW()
         )
         ON CONFLICT (olt_id, pon_port_id, serial) DO UPDATE SET
@@ -324,6 +359,7 @@ def _upsert_pending_onu(
             pon_position = EXCLUDED.pon_position,
             raw_payload = EXCLUDED.raw_payload,
             discovery_source = EXCLUDED.discovery_source,
+            onu_model_id = COALESCE(EXCLUDED.onu_model_id, pending_onu.onu_model_id),
             last_seen_at = NOW()
         """
     )
@@ -337,6 +373,7 @@ def _upsert_pending_onu(
             "pon_position": pon_position,
             "raw_payload": json.dumps(raw_payload) if raw_payload is not None else None,
             "discovery_source": discovery_source,
+            "onu_model_id": str(onu_model_id) if onu_model_id is not None else None,
         },
     )
 
