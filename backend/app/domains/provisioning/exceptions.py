@@ -240,6 +240,37 @@ class RetryOfOrderInvalid(BadRequestError):
         )
 
 
+class ProvisioningOrderIdempotencyPayloadMismatch(ConflictError):
+    """`idempotency_key` já usada em outra ordem com payload diferente."""
+
+    def __init__(self, idempotency_key: str) -> None:
+        super().__init__(
+            (
+                f"idempotency_key '{idempotency_key}' já foi usada em outra "
+                "ordem com payload diferente. Idempotency keys precisam ser "
+                "únicos por payload; use um novo key para este request."
+            ),
+            details={"idempotency_key": idempotency_key},
+        )
+
+
+class ProvisioningOrderNotCancelable(ConflictError):
+    """Ordem não está em estado cancelável (só PENDING é cancelável)."""
+
+    def __init__(self, provisioning_order_id: UUID, current_status: str) -> None:
+        super().__init__(
+            (
+                f"Ordem {provisioning_order_id} não pode ser cancelada "
+                f"no estado '{current_status}'. Só ordens em 'pending' são "
+                "canceláveis; use retry para gerar nova ordem se necessário."
+            ),
+            details={
+                "provisioning_order_id": str(provisioning_order_id),
+                "current_status": current_status,
+            },
+        )
+
+
 class OltCommandProfileNotFound(NotFoundError):
     def __init__(self, olt_command_profile_id: UUID) -> None:
         super().__init__(
