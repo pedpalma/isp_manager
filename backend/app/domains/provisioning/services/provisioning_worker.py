@@ -827,6 +827,8 @@ def _finalize(order_id: UUID, outcome: _PersistOutcome) -> None:
         outcome.final_status_if_no_rollback,
         failure_reason=outcome.failure_reason,
     )
+    if outcome.final_status_if_no_rollback == ProvisioningStatus.SUCCESS:
+        _try_materialize_onu(order_id)
     log.info(
         "provisioning.worker.finished",
         provisioning_order_id=str(order_id),
@@ -881,4 +883,199 @@ def _mark_finished(
                 "err": (failure_reason[:1000] if failure_reason else None),
                 "id": str(order_id),
             },
+        )
+
+
+# Materialização de ONU pós-SUCCESS (Rodada 3, P-M18d.1)
+def _try_materialize_onu(order_id: UUID) -> None:
+    """Cria linha `onu` a partir de `pending_onu` quando SUCCESS."""
+    try:
+        with session_scope() as db:
+            row = db.execute(
+                text(
+                    """
+                    SELECT olt_id, pon_port_id, provisioning_template_id,
+                            onu_id, snapshot_params
+                    FROM provisioning_order
+                    WHERE provisioning_order_id = :id
+                    """
+                ),
+                {"id": str(order_id)},
+            ).first()
+            if row is None:
+                log.error(
+                    "provisioning.materialization.order_missing",
+                    provisioning_order_id=str(order_id),
+                )
+                return
+            olt_id, pon_port_id, template_id, existing_onu_id, snap = row
+            snap = snap or {}
+            snap_serial = snap.get("serial")
+
+            # Caso 1: order já apontava para uma onu viva. Só marca a
+            # pending_onu correspondente (se houver) como resolvida.
+            if existing_onu_id is not None:
+                if snap_serial:
+                    db.execute(
+                        text(
+                            """
+                            UPDATE pending_onu
+                                SET state = CAST('resolved' AS pending_onu_state_enum),
+                                    resolution_type = CAST('provisioned' AS resolution_type_enum),
+                                    resolved_at = NOW(),
+                                    linked_onu_id = :onu_id,
+                                    last_seen_at = NOW()
+                            WHERE olt_id = :olt AND pon_port_id = :pon
+                                AND serial = :serial
+                                AND state IN ('detected', 'waiting')
+                            """
+                        ),
+                        {
+                            "onu_id": str(existing_onu_id),
+                            "olt": str(olt_id),
+                            "pon": str(pon_port_id),
+                            "serial": snap_serial,
+                        },
+                    )
+                log.info(
+                    "provisioning.materialization.pending_resolved_only",
+                    provisioning_order_id=str(order_id),
+                    onu_id=str(existing_onu_id),
+                )
+                return
+
+            # Casos 2 e 3: order.onu_id NULL. Busca pending_onu ativa
+            # correspondente para pegar onu_model_id (matching Rodada 2).
+            if not snap_serial:
+                log.warning(
+                    "provisioning.materialization.no_serial_in_snapshot",
+                    provisioning_order_id=str(order_id),
+                )
+                return
+
+            pending_row = db.execute(
+                text(
+                    """
+                    SELECT pending_onu_id, onu_model_id
+                    FROM pending_onu
+                    WHERE olt_id = :olt AND pon_port_id = :pon
+                        AND serial = :serial
+                        AND state IN ('detected', 'waiting')
+                    ORDER BY last_seen_at DESC
+                    LIMIT 1
+                    FOR UPDATE
+                    """
+                ),
+                {
+                    "olt": str(olt_id),
+                    "pon": str(pon_port_id),
+                    "serial": snap_serial,
+                },
+            ).first()
+
+            if pending_row is None:
+                # Sem pending_onu ativa: nada a materializar (pode ter
+                # sido resolvida em paralelo por outro fluxo). Ordem
+                # continua SUCCESS.
+                log.warning(
+                    "provisioning.materialization.pending_not_found",
+                    provisioning_order_id=str(order_id),
+                    serial=snap_serial,
+                )
+                return
+
+            pending_id, pending_onu_model_id = pending_row
+
+            if pending_onu_model_id is None:
+                # Caso 3: vendor_id não bateu no matching do discovery.
+                # Marca pending resolved sem linked_onu_id.
+                db.execute(
+                    text(
+                        """
+                        UPDATE pending_onu
+                        SET state = CAST('resolved' AS pending_onu_state_enum),
+                            resolution_type = CAST('provisioned' AS resolution_type_enum),
+                            resolved_at = NOW(),
+                            last_seen_at = NOW()
+                        WHERE pending_onu_id = :id
+                        """
+                    ),
+                    {"id": str(pending_id)},
+                )
+                log.warning(
+                    "provisioning.materialization.skipped_no_onu_model",
+                    provisioning_order_id=str(order_id),
+                    pending_onu_id=str(pending_id),
+                    serial=snap_serial,
+                )
+                return
+
+            # Caso 2: cria onu.
+            line_profile_id = snap.get("line_profile_id")
+            service_profile_id = snap.get("service_profile_id")
+            onu_index = snap.get("onu_index")
+
+            new_onu_id = db.execute(
+                text(
+                    """
+                    INSERT INTO onu (
+                        onu_model_id, pon_port_id,
+                        line_profile_id, service_profile_id,
+                        provisioning_template_id, serial, onu_index,
+                        provisioned
+                    ) VALUES (
+                        :model, :pon, :lp, :sp, :tpl, :serial, :idx, TRUE
+                    )
+                    RETURNING onu_id
+                    """
+                ),
+                {
+                    "model": str(pending_onu_model_id),
+                    "pon": str(pon_port_id),
+                    "lp": str(line_profile_id) if line_profile_id else None,
+                    "sp": str(service_profile_id) if service_profile_id else None,
+                    "tpl": str(template_id),
+                    "serial": snap_serial,
+                    "idx": onu_index,
+                },
+            ).scalar_one()
+
+            # Amarra order + pending_onu à nova onu.
+            db.execute(
+                text(
+                    """
+                    UPDATE provisioning_order
+                    SET onu_id = :onu
+                    WHERE provisioning_order_id = :id
+                    """
+                ),
+                {"onu": str(new_onu_id), "id": str(order_id)},
+            )
+            db.execute(
+                text(
+                    """
+                    UPDATE pending_onu
+                    SET state = CAST('resolved' AS pending_onu_state_enum),
+                        resolution_type = CAST('provisioned' AS resolution_type_enum),
+                        resolved_at = NOW(),
+                        linked_onu_id = :onu,
+                        last_seen_at = NOW()
+                    WHERE pending_onu_id = :pid
+                    """
+                ),
+                {"onu": str(new_onu_id), "pid": str(pending_id)},
+            )
+
+            log.info(
+                "provisioning.materialization.success",
+                provisioning_order_id=str(order_id),
+                onu_id=str(new_onu_id),
+                serial=snap_serial,
+                onu_model_id=str(pending_onu_model_id),
+            )
+    except Exception as exc:
+        log.exception(
+            "provisioning.materialization.failed",
+            provisioning_order_id=str(order_id),
+            error=str(exc),
         )
