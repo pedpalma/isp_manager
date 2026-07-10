@@ -57,6 +57,7 @@ class ProvisioningOrderRead(BaseModel):
     provisioning_template_id: UUID
     retry_of_order_id: UUID | None
     idempotency_key: str
+    idempotency_payload_hash: str | None
     status: ProvisioningStatus
     failure_reason: str | None
     result_summary: str | None
