@@ -1,8 +1,6 @@
-# Service do ProvisioningOrder (M18d).
-
-from __future__ import annotations
-
-from datetime import datetime
+import hashlib
+import json
+from datetime import datetime, timezone
 from uuid import UUID
 
 import structlog
@@ -31,6 +29,8 @@ from app.domains.provisioning.exceptions import (
     PonPortReferenceInvalid,
     ProvisioningOrderActiveConflict,
     ProvisioningOrderIdempotencyConflict,
+    ProvisioningOrderIdempotencyPayloadMismatch,
+    ProvisioningOrderNotCancelable,
     ProvisioningOrderNotFound,
     ProvisioningTemplateReferenceInvalid,
     RetryOfOrderInvalid,
@@ -69,6 +69,9 @@ log = structlog.get_logger(__name__)
 _UQ_IDEMPOTENCY = "uq_provisioning_idempotency"
 _UQ_PROV_ACTIVE = "uq_prov_order_active_unique"
 
+# Estados de pending_onu considerados ainda ativos para o reconhecimento de serial.
+_ACTIVE_PENDING_ONU_STATES = ("detected", "waiting")
+
 
 def _violated_constraint(orig: str) -> str | None:
     if _UQ_IDEMPOTENCY in orig:
@@ -78,10 +81,16 @@ def _violated_constraint(orig: str) -> str | None:
     return None
 
 
-# Estados de pending_onu considerados ainda ativos para o reconhecimento de serial.
-# Ver DDL pending_onu_state_enum: valores existentes são detected, waiting, resolved.
-# Ativos = tudo menos resolved.
-_ACTIVE_PENDING_ONU_STATES = ("detected", "waiting")
+def _compute_payload_hash(payload: ProvisioningOrderCreate) -> str:
+    """Hash canônico do payload para idempotência."""
+    data = payload.model_dump(mode="json")
+    data.pop("idempotency_key", None)
+    canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)  # noqa: UP017
 
 
 class ProvisioningOrderService:
@@ -92,7 +101,6 @@ class ProvisioningOrderService:
         self._rollback_repo = ProvisioningRollbackRepository(session)
 
     # READ
-
     async def get_detail(
         self, provisioning_order_id: UUID, *, actor: Actor
     ) -> ProvisioningOrderDetailRead:
@@ -131,7 +139,6 @@ class ProvisioningOrderService:
         )
 
     async def _build_detail(self, order: ProvisioningOrder) -> ProvisioningOrderDetailRead:
-        """Padrão TopologyService: 2 queries auxiliares, montagem em Python."""
         steps = await self._step_repo.list_for_order(order.provisioning_order_id)
         rollback = await self._rollback_repo.get_for_order(order.provisioning_order_id)
         return ProvisioningOrderDetailRead(
@@ -143,26 +150,25 @@ class ProvisioningOrderService:
         )
 
     # CREATE
-
     async def create_order(
         self,
         *,
         payload: ProvisioningOrderCreate,
         actor: Actor,
-    ) -> ProvisioningOrderDetailRead:
-        """Cria uma ordem em 'pending' após 9 validações semânticas.
+    ) -> tuple[ProvisioningOrderDetailRead, bool]:
+        """Cria uma ordem em 'pending' ou devolve a existente na idempotência."""
+        payload_hash = _compute_payload_hash(payload)
 
-        Ordem das validações: barato -> caro. O serial e a colisão de onu_index
-        vêm por último (2 queries) para não pagar quando a ordem já quebra em
-        pré-check simples.
-
-        O actor chega SEMPRE com actor_id populado porque a rota exige
-        require_admin (CurrentUser.to_actor()). Sem guard defensivo aqui.
-        """
-        # V0 (pré-check amigável): idempotency_key
+        # V0 (idempotência): key existe?
         existing_by_key = await self._repo.get_by_idempotency_key(payload.idempotency_key)
         if existing_by_key is not None:
-            raise ProvisioningOrderIdempotencyConflict(payload.idempotency_key)
+            reused_order = self._resolve_idempotent_hit(
+                existing=existing_by_key,
+                incoming_key=payload.idempotency_key,
+                incoming_hash=payload_hash,
+            )
+            detail = await self._build_detail(reused_order)
+            return detail, True
 
         # V1: OLT viva
         olt = await OltRepository(self._session).get_by_id(payload.olt_id)
@@ -181,9 +187,6 @@ class ProvisioningOrderService:
         if pon_data is None:
             raise PonPortReferenceInvalid(payload.pon_port_id, reason="pon_port_id inexistente")
         pon_port: PonPort = pon_data[0]
-        # confirma que a PON pertence à OLT informada
-        # slot -> chassis -> olt (encadeamento; usamos slot.chassis_id via select adicional
-        # para não montar tuple manual)
         chassis_check = await self._session.execute(
             select(Slot).where(Slot.slot_id == pon_port.slot_id)
         )
@@ -192,7 +195,6 @@ class ProvisioningOrderService:
             raise PonPortReferenceInvalid(
                 payload.pon_port_id, reason="slot da pon_port não encontrado"
             )
-        # chassis é filho de olt; validação simples via JOIN topológico
         chassis_obj = (
             await self._session.execute(
                 select(Chassis).where(Chassis.chassis_id == slot_obj.chassis_id)
@@ -203,7 +205,7 @@ class ProvisioningOrderService:
                 payload.pon_port_id, reason="pon_port não pertence à olt_id informada"
             )
 
-        # V3: line_profile / service_profile / vlan pertencem à OLT E estão ativos
+        # V3: line_profile / service_profile / vlan
         snap = payload.snapshot
         line_profile = await self._session.get(LineProfile, snap.line_profile_id)
         if line_profile is None or line_profile.olt_id != payload.olt_id:
@@ -227,7 +229,7 @@ class ProvisioningOrderService:
         if not vlan.active:
             raise VlanReferenceInvalid(snap.vlan_id, reason="inativa")
 
-        # V4: template ativo + manufacturer/olt_model batem com a OLT
+        # V4: template
         template = await self._session.get(ProvisioningTemplate, payload.provisioning_template_id)
         if template is None:
             raise ProvisioningTemplateReferenceInvalid(
@@ -237,7 +239,6 @@ class ProvisioningOrderService:
             raise ProvisioningTemplateReferenceInvalid(
                 payload.provisioning_template_id, reason="inativo"
             )
-        # olt.olt_model_id -> manufacturer_id casam com template
         olt_model = await self._session.get(OltModel, olt.olt_model_id)
         if olt_model is None:
             raise ProvisioningTemplateReferenceInvalid(
@@ -255,7 +256,7 @@ class ProvisioningOrderService:
                 reason="olt_model do template diverge do modelo da OLT",
             )
 
-        # V5: retry_of_order_id (opcional) referencia ordem terminal
+        # V5: retry_of_order_id (opcional)
         if payload.retry_of_order_id is not None:
             retry_src = await self._repo.get_by_id(payload.retry_of_order_id)
             if retry_src is None:
@@ -266,7 +267,7 @@ class ProvisioningOrderService:
                     reason=(f"ordem original em estado não terminal ({retry_src.status.value})"),
                 )
 
-        # V6: serial reconhecido (onu viva OU pending_onu em estado ativo)
+        # V6: serial reconhecido
         existing_onu_by_serial = (
             await self._session.execute(
                 select(Onu).where(Onu.serial == payload.serial, Onu.deleted_at.is_(None))
@@ -276,7 +277,6 @@ class ProvisioningOrderService:
         if existing_onu_by_serial is not None:
             onu_id_for_order = existing_onu_by_serial.onu_id
         else:
-            # procura em pending_onu ativo na PON informada
             pending_row = (
                 await self._session.execute(
                     text(
@@ -299,7 +299,7 @@ class ProvisioningOrderService:
             if pending_row is None:
                 raise SerialNotRecognized(payload.serial)
 
-        # V7: onu_index não colide com outra ONU viva na PON
+        # V7: onu_index não colide
         colliding_onu = (
             await self._session.execute(
                 select(Onu).where(
@@ -318,13 +318,12 @@ class ProvisioningOrderService:
                 existing_onu_id=colliding_onu.onu_id,
             )
 
-        # V8 (pré-check amigável): uq_prov_order_active_unique (índice 0007)
-        # Só se aplica quando onu_id_for_order não é None (índice parcial).
+        # V8: uq_prov_order_active_unique
         if onu_id_for_order is not None:  # noqa: SIM102
             if await self._repo.has_active_for_onu(onu_id_for_order):
                 raise ProvisioningOrderActiveConflict(onu_id_for_order)
 
-        # Denormalização SnapshotIngest -> SnapshotStored
+        # Denormalização
         snapshot_stored = SnapshotStored(
             line_profile_id=snap.line_profile_id,
             service_profile_id=snap.service_profile_id,
@@ -347,9 +346,9 @@ class ProvisioningOrderService:
             provisioning_template_id=payload.provisioning_template_id,
             retry_of_order_id=payload.retry_of_order_id,
             idempotency_key=payload.idempotency_key,
+            idempotency_payload_hash=payload_hash,
             snapshot_params=snapshot_stored.model_dump(mode="json"),
         )
-        # Snapshot dos campos usados em exception antes do commit
         idempotency_key_local = payload.idempotency_key
         onu_id_local = onu_id_for_order
 
@@ -360,12 +359,20 @@ class ProvisioningOrderService:
             await self._session.rollback()
             constraint = _violated_constraint(str(exc.orig))
             if constraint == _UQ_IDEMPOTENCY:
+                existing = await self._repo.get_by_idempotency_key(idempotency_key_local)
+                if existing is not None:
+                    reused_order = self._resolve_idempotent_hit(
+                        existing=existing,
+                        incoming_key=idempotency_key_local,
+                        incoming_hash=payload_hash,
+                    )
+                    detail = await self._build_detail(reused_order)
+                    return detail, True
                 raise ProvisioningOrderIdempotencyConflict(idempotency_key_local) from exc
             if constraint == _UQ_PROV_ACTIVE and onu_id_local is not None:
                 raise ProvisioningOrderActiveConflict(onu_id_local) from exc
             raise
 
-        # Popula server_defaults (id, status='pending', created_at, requested_at)
         await self._session.refresh(order)
 
         log.info(
@@ -376,7 +383,62 @@ class ProvisioningOrderService:
             template_id=str(payload.provisioning_template_id),
             onu_id=str(onu_id_for_order) if onu_id_for_order else None,
             serial=payload.serial,
+            payload_hash=payload_hash,
             actor=str(actor),
         )
 
+        detail = await self._build_detail(order)
+        return detail, False  # was_reused
+
+    def _resolve_idempotent_hit(
+        self,
+        *,
+        existing: ProvisioningOrder,
+        incoming_key: str,
+        incoming_hash: str,
+    ) -> ProvisioningOrder:
+        """Decide reuso vs mismatch para uma ordem já existente com o
+        mesmo idempotency_key."""
+        existing_hash = existing.idempotency_payload_hash
+        if existing_hash is None or existing_hash == incoming_hash:
+            log.info(
+                "provisioning_order.idempotent_hit",
+                provisioning_order_id=str(existing.provisioning_order_id),
+                idempotency_key=incoming_key,
+                legacy_no_hash=existing_hash is None,
+            )
+            return existing
+        raise ProvisioningOrderIdempotencyPayloadMismatch(incoming_key)
+
+    # CANCEL
+    async def cancel_order(
+        self,
+        provisioning_order_id: UUID,
+        *,
+        actor: Actor,
+    ) -> ProvisioningOrderDetailRead:
+        """Cancela ordem em estado 'pending'"""
+        stmt = (
+            select(ProvisioningOrder)
+            .where(ProvisioningOrder.provisioning_order_id == provisioning_order_id)
+            .with_for_update()
+        )
+        order = (await self._session.execute(stmt)).scalar_one_or_none()
+        if order is None:
+            raise ProvisioningOrderNotFound(provisioning_order_id)
+
+        if order.status != ProvisioningStatus.PENDING:
+            raise ProvisioningOrderNotCancelable(provisioning_order_id, order.status.value)
+
+        order.status = ProvisioningStatus.CANCELED
+        order.finished_at = _utcnow()
+        order.failure_reason = f"canceled by {actor}"
+        await self._session.commit()
+        await self._session.refresh(order)
+
+        log.info(
+            "provisioning_order.canceled",
+            provisioning_order_id=str(provisioning_order_id),
+            actor=str(actor),
+        )
         return await self._build_detail(order)
