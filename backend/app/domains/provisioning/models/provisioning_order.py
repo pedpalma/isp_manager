@@ -63,6 +63,8 @@ class ProvisioningOrder(Base):
 
     idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
 
+    idempotency_payload_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     status: Mapped[ProvisioningStatus] = mapped_column(
         PG_ENUM(
             ProvisioningStatus,
