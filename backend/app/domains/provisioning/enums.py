@@ -50,6 +50,7 @@ class ProvisioningStatus(str, Enum):  # noqa: UP042
     FAILED = "failed"
     ROLLED_BACK = "rolled_back"
     PARTIAL = "partial"
+    CANCELED = "canceled"
 
 
 class RollbackStatus(str, Enum):  # noqa: UP042
@@ -85,5 +86,6 @@ TERMINAL_PROVISIONING_STATUSES: frozenset[ProvisioningStatus] = frozenset(
         ProvisioningStatus.FAILED,
         ProvisioningStatus.ROLLED_BACK,
         ProvisioningStatus.PARTIAL,
+        ProvisioningStatus.CANCELED,
     }
 )
