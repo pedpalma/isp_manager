@@ -7,7 +7,7 @@ from typing import Annotated
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, require_admin
@@ -71,27 +71,31 @@ async def get_provisioning_order(
 @router.post(
     "",
     response_model=ProvisioningOrderDetailRead,
+    # status_code default é 202 (fluxo normal: enfileirou worker).
+    # Se o service devolver was_reused=True, o handler troca para 200.
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def create_provisioning_order(
     payload: ProvisioningOrderCreate,
     current: Annotated[CurrentUser, Depends(require_admin)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    response: Response,
 ) -> ProvisioningOrderDetailRead:
-    """Cria ordem em 'pending', commita, enfileira o worker Celery, refecha o
-    detalhe atualizado e retorna. Sob task_always_eager=True (testes) o detalhe
-    já reflete estado terminal (success/failed/rolled_back/partial)."""
-
+    """Cria ordem em 'pending' e enfileira o worker Celery."""
     service = ProvisioningOrderService(session)
     actor = current.to_actor()
-    order_detail = await service.create_order(payload=payload, actor=actor)
+    order_detail, was_reused = await service.create_order(payload=payload, actor=actor)
 
     order_id = order_detail.provisioning_order_id
+
+    if was_reused:
+        response.status_code = status.HTTP_200_OK
+        return order_detail
+
+    # Ordem nova: enfileira o worker.
     try:
         run_provisioning_order.delay(str(order_id))
     except Exception as exc:
-        # Janela de órfão idêntica ao M16: commit ok + enqueue falhando
-        # deixa ordem 'pending'; detect_stale_jobs marca failed após threshold.
         log.error(
             "provisioning.enqueue_failed",
             provisioning_order_id=str(order_id),
@@ -100,3 +104,18 @@ async def create_provisioning_order(
 
     # Refetch pós-delay para refletir estado terminal (sob eager) ou pending (prod).
     return await service.get_detail(order_id, actor=actor)
+
+
+@router.post(
+    "/{provisioning_order_id}/cancel",
+    response_model=ProvisioningOrderDetailRead,
+    status_code=status.HTTP_200_OK,
+)
+async def cancel_provisioning_order(
+    provisioning_order_id: UUID,
+    current: Annotated[CurrentUser, Depends(require_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ProvisioningOrderDetailRead:
+    """Cancela ordem em estado 'pending'."""
+    service = ProvisioningOrderService(session)
+    return await service.cancel_order(provisioning_order_id, actor=current.to_actor())
