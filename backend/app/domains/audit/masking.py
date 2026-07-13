@@ -37,7 +37,7 @@ def scrub_secrets(payload: Any) -> Any:
                 scrubbed[key] = MASK_STRING
             else:
                 scrubbed[key] = scrub_secrets(value)
-            return scrubbed
+        return scrubbed
     if isinstance(payload, (list, tuple)):
         return [scrub_secrets(item) for item in payload]
     return payload
