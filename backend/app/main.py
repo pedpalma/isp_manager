@@ -23,6 +23,7 @@ from app.api.v1.routes import (
     line_profiles,
     manufacturers,
     normalized_commands,
+    olt_command_profiles,
     olt_models,
     olts,
     onu_models,
@@ -132,6 +133,7 @@ def create_app() -> FastAPI:
     app.include_router(provisioning_templates.router, prefix="/api/v1")
     app.include_router(normalized_commands.router, prefix="/api/v1")
     app.include_router(provisioning_orders.router, prefix="/api/v1")
+    app.include_router(olt_command_profiles.router, prefix="/api/v1")
     app.include_router(audit_log.router, prefix="/api/v1")
 
     return app
