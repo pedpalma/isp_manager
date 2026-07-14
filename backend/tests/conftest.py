@@ -408,6 +408,31 @@ def _try_inventory_cleanup() -> None:
         return
 
 
+def _try_audit_log_cleanup() -> None:
+    """Zera a tabela audit_log via TRUNCATE."""
+    try:
+        from sqlalchemy import create_engine, text  # noqa: PLC0415
+
+        from app.core.config import settings as _settings  # noqa: PLC0415
+
+        engine = create_engine(_settings.database.build_migrator_url())
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("TRUNCATE TABLE audit_log"))
+        finally:
+            engine.dispose()
+    except Exception:
+        return
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _audit_log_cleanup_session_scope():
+    """Zera audit_log antes E depois da sessão."""
+    _try_audit_log_cleanup()
+    yield
+    _try_audit_log_cleanup()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _inventory_cleanup_session_scope():
     """Limpa antes E depois da sessão. Limpar antes evita interferência de
