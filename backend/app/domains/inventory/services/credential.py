@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
 from app.core.logging import get_logger
+from app.domains.audit.enums import AuditAction, AuditResult
+from app.domains.audit.services.audit_log import AuditLogService
 from app.domains.inventory.enums import AuthType
 from app.domains.inventory.exceptions import (
     CredentialAuthMismatch,
@@ -29,10 +32,22 @@ log = get_logger(__name__)
 _SECRET_FIELDS = frozenset({"secret_ref", "enable_secret_ref", "private_key_ref"})
 
 
+def _dump_credential_fields(c: "Credential", fields: "Iterable[str]") -> dict[str, Any]:  # noqa: UP037
+    """Serializa campos do Credential para JSONB do audit_log."""
+    out: dict[str, Any] = {}
+    for f in fields:
+        v = getattr(c, f)
+        if isinstance(v, AuthType):
+            v = v.value
+        out[f] = v
+    return out
+
+
 class CredentialService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = CredentialRepository(session)
+        self._audit = AuditLogService(session)
 
     # Leitura
     async def get(self, credential_id: UUID, *, actor: Actor) -> Credential:
@@ -75,6 +90,28 @@ class CredentialService:
         )
         self._session.add(c)
         await self._session.flush()
+
+        # audit ANTES do commit; scrub_secrets mascara os ponteiros.
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.CREDENTIAL_CREATED,
+            result=AuditResult.SUCCESS,
+            entity_type="credential",
+            entity_id=c.credential_id,
+            after=_dump_credential_fields(
+                c,
+                [
+                    "label",
+                    "username",
+                    "secret_ref",
+                    "enable_secret_ref",
+                    "auth_type",
+                    "private_key_ref",
+                    "active",
+                ],
+            ),
+        )
+
         await self._session.commit()
 
         log.info(
@@ -125,15 +162,28 @@ class CredentialService:
             if await olt_repo.has_active_for_credential(c.credential_id):
                 raise CredentialInUse(c.credential_id)
 
+        touched_fields = list(payload.keys())
+        before = _dump_credential_fields(c, touched_fields)
+
         for field, value in payload.items():
             setattr(c, field, value)
 
         await self._repo.flush()
+
+        after = _dump_credential_fields(c, touched_fields)
+
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.CREDENTIAL_UPDATED,
+            result=AuditResult.SUCCESS,
+            entity_type="credential",
+            entity_id=c.credential_id,
+            before=before,
+            after=after,
+        )
+
         await self._session.commit()
 
-        # Log: nunca emitir valores de ponteiros. Só os NOMES dos campos
-        # tocados (`fields`). Os secretos não-tocados também não vazam
-        touched_fields = list(payload.keys())
         log.info(
             "credential.updated",
             credential_id=str(c.credential_id),
