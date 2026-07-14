@@ -11,6 +11,7 @@ SENSITIVE_KEYS: frozenset[str] = frozenset(
         # Credenciais de acesso a OLT
         "secret_ref",
         "private_key_ref",
+        "enable_secret_ref",
         # Autenticação de user
         "password",
         "password_hash",
