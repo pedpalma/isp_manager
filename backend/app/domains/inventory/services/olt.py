@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
 from app.core.logging import get_logger
+from app.domains.audit.enums import AuditAction, AuditResult
+from app.domains.audit.services.audit_log import AuditLogService
 from app.domains.inventory.exceptions import (
     CredentialInactive,
     CredentialReferenceInvalid,
@@ -45,6 +47,7 @@ class OltService:
         self._repo = OltRepository(session)
         self._olt_models = OltModelRepository(session)
         self._credentials = CredentialRepository(session)
+        self._audit = AuditLogService(session)
 
     # Leitura
     async def get(self, olt_id: UUID, *, actor: Actor) -> Olt:
@@ -181,14 +184,33 @@ class OltService:
         if olt is None:
             raise OltNotFound(olt_id)
 
-        olt.deleted_at = datetime.now(timezone.utc)  # noqa: UP017
+        now = datetime.now(timezone.utc)  # noqa: UP017
+        # Snapshot ANTES da mutação para reter identidade legível no audit.
+        entity_id = olt.olt_id
+        prior_name = olt.name
+
+        olt.deleted_at = now
         await self._repo.flush()
+
+        # audit dentro da MESMA TX; falha aqui reverte o soft_delete.
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.OLT_SOFT_DELETED,
+            result=AuditResult.SUCCESS,
+            entity_type="olt",
+            entity_id=entity_id,
+            olt_id=entity_id,
+            before={"deleted_at": None},
+            after={"deleted_at": now.isoformat()},
+            extra={"name": prior_name},
+        )
+
         await self._session.commit()
 
         log.info(
             "olt.deleted",
-            olt_id=str(olt.olt_id),
-            name=olt.name,
+            olt_id=str(entity_id),
+            name=prior_name,
             actor=actor.username,
         )
 
