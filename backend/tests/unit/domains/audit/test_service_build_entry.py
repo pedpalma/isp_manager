@@ -25,7 +25,7 @@ def _make_human_actor() -> Actor:
     return Actor(actor_id=uuid4(), username="pytest-admin", is_system=False)
 
 
-def test_build_entry_system_actor_leaves_app_user_is_null() -> None:
+def test_build_entry_system_actor_leaves_app_user_id_null() -> None:
     entity_id = uuid4()
     entry = _build_entry(
         actor=system_actor(),
