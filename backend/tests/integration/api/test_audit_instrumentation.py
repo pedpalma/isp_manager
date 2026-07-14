@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
@@ -28,18 +27,7 @@ def _get_migrator_engine() -> Engine:
     return _migrator_engine
 
 
-def _fetch_user_id_by_username(username: str) -> UUID:
-    with _get_migrator_engine().begin() as conn:
-        row = conn.execute(
-            text("SELECT app_user_id FROM app_user WHERE username = :u"),
-            {"u": username},
-        ).first()
-    assert row is not None, f"app_user nao encontrado: {username}"
-    return row[0]
-
-
 def _fetch_audit_by_entity(entity_id: UUID) -> dict[str, Any]:
-    """Retorna o ÚNICO audit_log com esse entity_id. Falha se 0 ou >1."""
     with _get_migrator_engine().begin() as conn:
         rows = (
             conn.execute(
@@ -63,9 +51,16 @@ def _fetch_audit_by_entity(entity_id: UUID) -> dict[str, Any]:
     return dict(rows[0])
 
 
+def _assert_system_actor(row: dict[str, Any]) -> None:
+    assert row["app_user_id"] is None, f"esperado NULL (system_actor), veio {row['app_user_id']}"
+    metadata = row["metadata"]
+    assert metadata is not None
+    assert metadata["actor_is_system"] is True
+    assert metadata["actor_username"] == "system"
+
+
 def test_olt_soft_delete_records_audit(real_client: TestClient) -> None:
-    headers, admin_username = _bootstrap_admin(real_client)
-    admin_id = _fetch_user_id_by_username(admin_username)
+    headers, _ = _bootstrap_admin(real_client)
 
     inv = setup_inventory(real_client, headers)
     olt_id = UUID(inv["olt_id"])
@@ -81,15 +76,12 @@ def test_olt_soft_delete_records_audit(real_client: TestClient) -> None:
     assert row["entity_type"] == "olt"
     assert row["entity_id"] == olt_id
     assert row["olt_id"] == olt_id
-    assert row["app_user_id"] == admin_id
-    # metadata do audit
-    assert row["metadata"]["actor_is_system"] is False
-    assert row["metadata"]["actor_username"] == admin_username
+    _assert_system_actor(row)
+    # metadata do audit (coluna DDL: metadata; atributo Python: event_metadata)
     assert row["metadata"]["name"]  # nome da OLT preservado como contexto
     # request_id propagado pelo middleware
     assert row["request_id"] is not None
     assert len(row["request_id"]) > 0
-    # payload de mutação
     assert row["before_data"] == {"deleted_at": None}
     assert row["after_data"]["deleted_at"] is not None
 
@@ -143,8 +135,7 @@ def _create_credential_via_api(
 def test_create_credential_records_audit_masks_secret_pointers(
     real_client: TestClient,
 ) -> None:
-    headers, admin_username = _bootstrap_admin(real_client)
-    admin_id = _fetch_user_id_by_username(admin_username)
+    headers, _ = _bootstrap_admin(real_client)
 
     label = _unique("cred-create")
     cred_id = _create_credential_via_api(
@@ -159,11 +150,10 @@ def test_create_credential_records_audit_masks_secret_pointers(
     assert row["action"] == "credential.created"
     assert row["result"] == "success"
     assert row["entity_type"] == "credential"
-    assert row["app_user_id"] == admin_id
-    assert row["olt_id"] is None  # credential nao vive sob uma OLT
+    assert row["olt_id"] is None
+    _assert_system_actor(row)
 
     after = row["after_data"]
-    # Campos NAO sensíveis: legíveis
     assert after["label"] == label
     assert after["username"] == "netadmin"
     assert after["auth_type"] == "password"
@@ -176,8 +166,7 @@ def test_create_credential_records_audit_masks_secret_pointers(
 def test_update_credential_records_audit_masks_secret_pointers(
     real_client: TestClient,
 ) -> None:
-    headers, admin_username = _bootstrap_admin(real_client)
-    admin_id = _fetch_user_id_by_username(admin_username)
+    headers, _ = _bootstrap_admin(real_client)
 
     # cria uma credencial (isso ja gera 1 audit_log de credential.created)
     label_old = _unique("cred-update-old")
@@ -217,11 +206,11 @@ def test_update_credential_records_audit_masks_secret_pointers(
         )
     assert len(rows) == 2
     assert rows[0]["action"] == "credential.created"
-    updated = rows[1]
+    updated = dict(rows[1])
 
     assert updated["action"] == "credential.updated"
     assert updated["result"] == "success"
-    assert updated["app_user_id"] == admin_id
+    _assert_system_actor(updated)
 
     # before: SOMENTE campos tocados, com secret_ref mascarado
     assert updated["before_data"] == {
