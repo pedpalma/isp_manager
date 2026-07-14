@@ -15,7 +15,7 @@ def test_scrub_secrets_primitives_pass_through() -> None:
     assert scrub_secrets(True) is True
 
 
-def test_scrub_secrets_mask_known_keys_flat_dict() -> None:
+def test_scrub_secrets_masks_known_keys_flat_dict() -> None:
     payload = {
         "secret_ref": "OLT_ADMIN_PASS_REF",
         "username": "admin",
@@ -29,7 +29,7 @@ def test_scrub_secrets_mask_known_keys_flat_dict() -> None:
     }
 
 
-def test_scrub_secrets_mask_all_sensitive_keys() -> None:
+def test_scrub_secrets_masks_all_sensitive_keys() -> None:
     payload = {k: f"value-of-{k}" for k in SENSITIVE_KEYS}
     scrubbed = scrub_secrets(payload)
     assert all(v == MASK_STRING for v in scrubbed.values())
@@ -52,6 +52,7 @@ def test_scrub_secrets_recursive_nested_dict() -> None:
             "auth_type": "password",
             "meta": {"private_key_ref": MASK_STRING, "kind": "ssh"},
         },
+        "olt_id": "olt-1",
     }
 
 
@@ -66,6 +67,12 @@ def test_scrub_secrets_does_not_mutate_original() -> None:
     scrubbed = scrub_secrets(original)
     assert original == {"password": "abc", "user": "u1"}
     assert scrubbed == {"password": MASK_STRING, "user": "u1"}
+
+
+def test_scrub_secrets_is_case_sensitive() -> None:
+    payload = {"PASSWORD": "abc", "password": "def"}
+    scrubbed = scrub_secrets(payload)
+    assert scrubbed == {"PASSWORD": "abc", "password": MASK_STRING}
 
 
 def test_scrub_secrets_masks_regardless_of_value_type() -> None:
