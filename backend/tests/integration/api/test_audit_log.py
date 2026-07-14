@@ -1,5 +1,3 @@
-# Testes de integração da rota /audit-log.
-
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -12,8 +10,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 
 from app.core.config import settings
-
-# Helpers ja expostos por test_auth.
 from tests.integration.api.test_auth import (  # type: ignore
     _bootstrap_admin,
     _create_group,
@@ -37,10 +33,10 @@ def _get_migrator_engine() -> Engine:
     return _migrator_engine
 
 
-def _delete_pytest_audit_logs() -> None:
-    """Remove audit_logs de teste (entity_type LIKE 'pytest-%')."""
+def _truncate_audit_log() -> None:
+    """Zera a tabela audit_log inteira via TRUNCATE."""
     with _get_migrator_engine().begin() as conn:
-        conn.execute(text("DELETE FROM audit_log WHERE entity_type LIKE 'pytest-%'"))
+        conn.execute(text("TRUNCATE TABLE audit_log"))
 
 
 def _insert_audit_log(
@@ -124,27 +120,30 @@ def _insert_audit_log(
     return audit_log_id
 
 
-# Fixtures
+# fixtures
+
+
 @pytest.fixture(scope="module", autouse=True)
 def _clean_audit_around_module():
     """Zera audit_logs de teste antes e depois do modulo."""
-    _delete_pytest_audit_logs()
+    _truncate_audit_log()
     yield
-    _delete_pytest_audit_logs()
+    _truncate_audit_log()
 
 
 @pytest.fixture
 def admin_headers(real_client: TestClient) -> dict[str, str]:
-    """Cria admin pytest-* e devolve headers com Bearer token."""
     headers, _ = _bootstrap_admin(real_client)
     return headers
 
 
 # Casos
+
+
 def test_list_empty_returns_200_and_zero_total(
     real_client: TestClient, admin_headers: dict[str, str]
 ) -> None:
-    _delete_pytest_audit_logs()
+    _truncate_audit_log()
 
     resp = real_client.get(
         "/api/v1/audit-log",
@@ -160,10 +159,9 @@ def test_list_empty_returns_200_and_zero_total(
 def test_list_returns_seeded_entries_ordered_by_created_desc(
     real_client: TestClient, admin_headers: dict[str, str]
 ) -> None:
-    _delete_pytest_audit_logs()
+    _truncate_audit_log()
     entity_type = _unique("list")
 
-    # Faz seed em três registros com created_at explicito para ordenar.
     now = datetime.now(tz=timezone.utc)  # noqa: UP017
     older_id = _insert_audit_log(
         entity_type=entity_type,
@@ -197,7 +195,7 @@ def test_list_returns_seeded_entries_ordered_by_created_desc(
 
 
 def test_list_filter_by_action(real_client: TestClient, admin_headers: dict[str, str]) -> None:
-    _delete_pytest_audit_logs()
+    _truncate_audit_log()
     entity_type = _unique("filter-action")
 
     _insert_audit_log(entity_type=entity_type, action="olt.soft_deleted")
@@ -216,7 +214,7 @@ def test_list_filter_by_action(real_client: TestClient, admin_headers: dict[str,
 
 
 def test_list_filter_by_result(real_client: TestClient, admin_headers: dict[str, str]) -> None:
-    _delete_pytest_audit_logs()
+    _truncate_audit_log()
     entity_type = _unique("filter-result")
 
     _insert_audit_log(entity_type=entity_type, result="success")
@@ -233,7 +231,7 @@ def test_list_filter_by_result(real_client: TestClient, admin_headers: dict[str,
 
 
 def test_list_filter_by_request_id(real_client: TestClient, admin_headers: dict[str, str]) -> None:
-    _delete_pytest_audit_logs()
+    _truncate_audit_log()
     entity_type = _unique("filter-req")
     req_id = _unique("rid")
 
@@ -253,7 +251,7 @@ def test_list_filter_by_request_id(real_client: TestClient, admin_headers: dict[
 def test_list_filter_by_created_range(
     real_client: TestClient, admin_headers: dict[str, str]
 ) -> None:
-    _delete_pytest_audit_logs()
+    _truncate_audit_log()
     entity_type = _unique("filter-range")
     base = datetime.now(tz=timezone.utc)  # noqa: UP017
 
@@ -314,7 +312,6 @@ def test_list_requires_auth(real_client: TestClient) -> None:
 
 
 def test_list_requires_admin(real_client: TestClient) -> None:
-    """Usuário em grupo sem {'all': True} recebe 403."""
     admin_headers_local, _ = _bootstrap_admin(real_client)
     group_id = _create_group(real_client, admin_headers_local, permissions={})
     username, password = _create_user(real_client, admin_headers_local, group_id)
@@ -330,11 +327,11 @@ def test_get_detail_requires_auth(real_client: TestClient) -> None:
 
 
 def test_list_pagination(real_client: TestClient, admin_headers: dict[str, str]) -> None:
-    _delete_pytest_audit_logs()
+    _truncate_audit_log()
     entity_type = _unique("page")
     now = datetime.now(tz=timezone.utc)  # noqa: UP017
 
-    # 5 registros com created_at determinísticos.
+    # 5 registros com created_at deterministicos.
     for i in range(5):
         _insert_audit_log(
             entity_type=entity_type,
