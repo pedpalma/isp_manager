@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
 from app.core.pagination import Page, PageParams
+from app.domains.audit.enums import AuditAction, AuditResult
+from app.domains.audit.services.audit_log import AuditLogService
 from app.domains.collection.enums import (
     JOB_TYPE_DISCOVERY,
     JOB_TYPE_SIGNAL_READING,
@@ -61,6 +63,7 @@ class CollectionJobService:
         self._session = session
         self._repo = CollectionJobRepository(session)
         self._log_repo = CollectionLogRepository(session)
+        self._audit = AuditLogService(session)
 
     async def get_detail(self, collection_job_id: UUID, *, actor: Actor) -> CollectionJobDetailRead:
         del actor
@@ -128,6 +131,16 @@ class CollectionJobService:
         # Refresh para popular server_defaults (collection_job_id, status,
         # created_at).
         await self._session.refresh(job)
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.COLLECTION_JOB_CREATED,
+            result=AuditResult.SUCCESS,
+            entity_type="collection_job",
+            entity_id=job.collection_job_id,
+            olt_id=olt_id,
+            extra={"job_type": JOB_TYPE_DISCOVERY, "trigger_type": "manual"},
+        )
+        await self._session.commit()
 
         log.info(
             "collection_job.created",
@@ -174,6 +187,17 @@ class CollectionJobService:
             raise
 
         await self._session.refresh(job)
+
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.COLLECTION_JOB_CREATED,
+            result=AuditResult.SUCCESS,
+            entity_type="collection_job",
+            entity_id=job.collection_job_id,
+            olt_id=olt_id,
+            extra={"job_type": JOB_TYPE_SIGNAL_READING, "trigger_type": "manual"},
+        )
+        await self._session.commit()
 
         log.info(
             "collection_job.created",
