@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
 from app.core.pagination import Page, PageParams
+from app.domains.audit.enums import AuditAction, AuditResult
+from app.domains.audit.services.audit_log import AuditLogService
 from app.domains.inventory.models.chassis import Chassis
 from app.domains.inventory.models.line_profile import LineProfile
 from app.domains.inventory.models.olt_model import OltModel
@@ -99,6 +101,7 @@ class ProvisioningOrderService:
         self._repo = ProvisioningOrderRepository(session)
         self._step_repo = ProvisioningStepRepository(session)
         self._rollback_repo = ProvisioningRollbackRepository(session)
+        self._audit = AuditLogService(session)
 
     # READ
     async def get_detail(
@@ -375,6 +378,26 @@ class ProvisioningOrderService:
 
         await self._session.refresh(order)
 
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.PROVISIONING_ORDER_CREATED,
+            result=AuditResult.SUCCESS,
+            entity_type="provisioning_order",
+            entity_id=order.provisioning_order_id,
+            olt_id=payload.olt_id,
+            onu_id=onu_id_for_order,
+            provisioning_order_id=order.provisioning_order_id,
+            after={
+                "status": "pending",
+                "serial": payload.serial,
+                "pon_port_id": str(payload.pon_port_id),
+                "template_id": str(payload.provisioning_template_id),
+                "idempotency_key": payload.idempotency_key,
+            },
+            extra={"payload_hash": payload_hash},
+        )
+        await self._session.commit()
+
         log.info(
             "provisioning_order.created",
             provisioning_order_id=str(order.provisioning_order_id),
@@ -429,10 +452,30 @@ class ProvisioningOrderService:
 
         if order.status != ProvisioningStatus.PENDING:
             raise ProvisioningOrderNotCancelable(provisioning_order_id, order.status.value)
+        # snapshot_fields_before_commit.
+        order_olt_id = order.olt_id
+        order_onu_id = order.onu_id
+        finished_at = _utcnow()
 
         order.status = ProvisioningStatus.CANCELED
-        order.finished_at = _utcnow()
+        order.finished_at = finished_at
         order.failure_reason = f"canceled by {actor}"
+        await self._session.flush()
+
+        # audit dentro da MESMA TX do cancel.
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.PROVISIONING_ORDER_CANCELED,
+            result=AuditResult.SUCCESS,
+            entity_type="provisioning_order",
+            entity_id=provisioning_order_id,
+            olt_id=order_olt_id,
+            onu_id=order_onu_id,
+            provisioning_order_id=provisioning_order_id,
+            before={"status": "pending"},
+            after={"status": "canceled", "finished_at": finished_at.isoformat()},
+        )
+
         await self._session.commit()
         await self._session.refresh(order)
 
