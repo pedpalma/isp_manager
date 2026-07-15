@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor
 from app.core.pagination import Page, PageParams
+from app.domains.audit.enums import AuditAction, AuditResult
+from app.domains.audit.services.audit_log import AuditLogService
 from app.domains.optical.enums import OpticalAlertStatus, OpticalSeverity
 from app.domains.optical.exceptions import (
     OpticalAlertEventNotFound,
@@ -32,6 +34,7 @@ class OpticalAlertService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = OpticalAlertEventRepository(session)
+        self._audit = AuditLogService(session)
 
     async def get(self, alert_id: UUID, *, actor: Actor) -> OpticalAlertEventRead:
         del actor
@@ -71,9 +74,6 @@ class OpticalAlertService:
         if alert is None:
             raise OpticalAlertEventNotFound(alert_id)
 
-        # Idempotência: já acknowledged ou resolved não retorna erro;
-        # acknowledged volta o mesmo objeto; resolved não admite voltar
-        # para acknowledged (transição inválida).
         if alert.status == OpticalAlertStatus.ACKNOWLEDGED:
             return OpticalAlertEventRead.model_validate(alert)
         if alert.status == OpticalAlertStatus.RESOLVED:
@@ -83,7 +83,23 @@ class OpticalAlertService:
                 requested_status=OpticalAlertStatus.ACKNOWLEDGED.value,
             )
 
+        prior_status = alert.status.value
+        alert_onu_id = alert.onu_id
+
         alert.status = OpticalAlertStatus.ACKNOWLEDGED
+        await self._session.flush()
+
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.OPTICAL_ALERT_ACKNOWLEDGED,
+            result=AuditResult.SUCCESS,
+            entity_type="optical_alert_event",
+            entity_id=alert_id,
+            onu_id=alert_onu_id,
+            before={"status": prior_status},
+            after={"status": OpticalAlertStatus.ACKNOWLEDGED.value},
+        )
+
         await self._session.commit()
         await self._session.refresh(alert)
         log.info(
@@ -102,8 +118,28 @@ class OpticalAlertService:
         if alert.status == OpticalAlertStatus.RESOLVED:
             return OpticalAlertEventRead.model_validate(alert)
 
+        prior_status = alert.status.value
+        alert_onu_id = alert.onu_id
+        resolved_at = _utcnow()
+
         alert.status = OpticalAlertStatus.RESOLVED
-        alert.resolved_at = _utcnow()
+        alert.resolved_at = resolved_at
+        await self._session.flush()
+
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.OPTICAL_ALERT_RESOLVED,
+            result=AuditResult.SUCCESS,
+            entity_type="optical_alert_event",
+            entity_id=alert_id,
+            onu_id=alert_onu_id,
+            before={"status": prior_status, "resolved_at": None},
+            after={
+                "status": OpticalAlertStatus.RESOLVED.value,
+                "resolved_at": resolved_at.isoformat(),
+            },
+        )
+
         await self._session.commit()
         await self._session.refresh(alert)
         log.info(
