@@ -192,7 +192,7 @@ def test_create_discovery_job_records_audit(real_client: TestClient) -> None:
     olt_id = _create_olt_for_test(real_client, admin_headers)
 
     resp = real_client.post(
-        "/api/v1/collection-jobs/discovery",
+        "/api/v1/collection-jobs",
         headers=admin_headers,
         json={"olt_id": str(olt_id)},
     )
@@ -379,24 +379,40 @@ def _seed_optical_alert_event(
 def _seed_optical_policy_and_onu(
     real_client: TestClient, headers: dict[str, str]
 ) -> tuple[UUID, UUID]:
-    """Cria OLT+ONU via setup_inventory + insere policy 'global' via SQL.
+    """Cria OLT+PON via setup_inventory (não cria ONU), cria onu_model +
+    onu via API, e insere policy 'global' via SQL.
     Retorna (onu_id, policy_id)."""
     from tests.integration.api._olt_mock import setup_inventory  # type: ignore
 
     inv = setup_inventory(real_client, headers)
-    onu_id_raw = inv.get("onu_id") or inv.get("pon_port_id")  # noqa: F841
-    # Se setup_inventory não cria ONU, criamos manualmente via SQL depois.
-    # Aqui assumimos que inv tem onu_id. Se não tiver, o teste é skip logico.
+
+    r = real_client.post(
+        "/api/v1/onu-models",
+        headers=headers,
+        json={
+            "manufacturer_id": str(inv["manufacturer_id"]),
+            "model": _unique("onum"),
+            "active": True,
+        },
+    )
+    assert r.status_code == status.HTTP_201_CREATED, r.text
+    onu_model_id = r.json()["onu_model_id"]
+
+    serial = f"PYTEST{uuid4().hex[:8].upper()}"
+    r = real_client.post(
+        "/api/v1/onus",
+        headers=headers,
+        json={
+            "pon_port_id": str(inv["pon_port_id"]),
+            "onu_model_id": onu_model_id,
+            "serial": serial,
+        },
+    )
+    assert r.status_code == status.HTTP_201_CREATED, r.text
+    onu_id = UUID(r.json()["onu_id"])
 
     policy_id = uuid4()
     with _get_migrator_engine().begin() as conn:
-        if inv.get("onu_id") is None:
-            # ONU precisa de pon_port_id e outros campos NOT NULL; fica
-            # complexo. Melhor: pular esse teste se setup não entrega ONU.
-            raise RuntimeError(
-                "setup_inventory não devolveu onu_id; "
-                "ajustar o teste optical_alert conforme o helper real"
-            )
         conn.execute(
             text(
                 """
@@ -410,7 +426,7 @@ def _seed_optical_policy_and_onu(
             ),
             {"id": str(policy_id)},
         )
-    return UUID(str(inv["onu_id"])), policy_id
+    return onu_id, policy_id
 
 
 def test_acknowledge_alert_records_audit(real_client: TestClient) -> None:
