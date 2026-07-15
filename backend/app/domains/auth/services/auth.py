@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.actor import Actor
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.domains.audit.enums import AuditAction, AuditResult
+from app.domains.audit.services.audit_log import AuditLogService
 from app.domains.auth.exceptions import (
     AppUserNotFound,
     CurrentPasswordInvalid,
@@ -51,6 +53,7 @@ class AuthService:
         self._session = session
         self._users = AppUserRepository(session)
         self._sessions = AppUserSessionRepository(session)
+        self._audit = AuditLogService(session)
 
     def _access_ttl_seconds(self) -> int:
         return settings.security.access_token_expire_minutes * 60
@@ -90,6 +93,24 @@ class AuthService:
         self._session.add(sess)
         user.last_login_at = now
         await self._session.flush()
+
+        self_actor = Actor(
+            actor_id=user.app_user_id,
+            username=user.username,
+            is_system=False,
+        )
+        await self._audit.record(
+            actor=self_actor,
+            action=AuditAction.AUTH_LOGIN,
+            result=AuditResult.SUCCESS,
+            entity_type="app_user",
+            entity_id=user.app_user_id,
+            extra={
+                "session_id": str(session_id),
+                "ip_address": ip_address,
+                "user_agent": user_agent[:256] if user_agent else None,
+            },
+        )
         await self._session.commit()
 
         log.info(
@@ -139,6 +160,20 @@ class AuthService:
         sess.token_hash = hash_token(access)
         sess.last_used_at = datetime.now(timezone.utc)  # noqa: UP017
         await self._session.flush()
+
+        self_actor = Actor(
+            actor_id=user.app_user_id,
+            username=user.username,
+            is_system=False,
+        )
+        await self._audit.record(
+            actor=self_actor,
+            action=AuditAction.AUTH_REFRESH,
+            result=AuditResult.SUCCESS,
+            entity_type="app_user",
+            entity_id=user.app_user_id,
+            extra={"session_id": str(sess.app_user_session_id)},
+        )
         await self._session.commit()
 
         log.info(
@@ -155,6 +190,16 @@ class AuthService:
 
     async def logout(self, *, session_id: UUID, actor: Actor) -> None:
         await self._sessions.revoke_by_id(session_id)
+
+        if actor.actor_id is not None:
+            await self._audit.record(
+                actor=actor,
+                action=AuditAction.AUTH_LOGOUT,
+                result=AuditResult.SUCCESS,
+                entity_type="app_user",
+                entity_id=actor.actor_id,
+                extra={"session_id": str(session_id)},
+            )
         await self._session.commit()
         log.info("auth.logout", session_id=str(session_id), actor=actor.username)
 
@@ -172,6 +217,14 @@ class AuthService:
         # Forca novo login em todos os dispositivos após a troca.
         await self._sessions.revoke_all_for_user(app_user_id)
         await self._session.flush()
+        await self._audit.record(
+            actor=actor,
+            action=AuditAction.AUTH_PASSWORD_CHANGED,
+            result=AuditResult.SUCCESS,
+            entity_type="app_user",
+            entity_id=app_user_id,
+            extra={"revoked_all_sessions": True},
+        )
         await self._session.commit()
 
         log.info(
