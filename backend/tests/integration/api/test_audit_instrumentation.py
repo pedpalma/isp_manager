@@ -418,10 +418,10 @@ def _seed_optical_policy_and_onu(
                 """
                 INSERT INTO optical_threshold_policy (
                     optical_threshold_policy_id, scope_type,
-                    metric_name, warning_threshold, critical_threshold,
+                    metric_name, threshold_min, threshold_max,
                     severity, active
                 )
-                VALUES (:id, 'global', 'rx_power_dbm', -28.0, -32.0, 'critical', TRUE)
+                VALUES (:id, 'global', 'rx_power_dbm', -32.0, -28.0, 'critical', TRUE)
                 """
             ),
             {"id": str(policy_id)},
