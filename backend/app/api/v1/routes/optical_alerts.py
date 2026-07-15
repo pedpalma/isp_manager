@@ -12,8 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_actor, require_admin
-from app.core.actor import Actor
+from app.api.deps import CurrentUser, require_admin
 from app.core.pagination import Page, PageParams, page_params
 from app.db.session import get_session
 from app.domains.optical.enums import OpticalAlertStatus, OpticalSeverity
@@ -30,7 +29,6 @@ def get_service(session: AsyncSession = Depends(get_session)) -> OpticalAlertSer
 @router.get(
     "",
     response_model=Page[OpticalAlertEventRead],
-    dependencies=[Depends(require_admin)],
 )
 async def list_optical_alerts(
     olt_id: UUID | None = Query(default=None),
@@ -39,7 +37,7 @@ async def list_optical_alerts(
     severity: OpticalSeverity | None = Query(default=None),
     params: PageParams = Depends(page_params),
     service: OpticalAlertService = Depends(get_service),
-    actor: Actor = Depends(get_current_actor),
+    current: CurrentUser = Depends(require_admin),
 ) -> Page[OpticalAlertEventRead]:
     return await service.list_page(
         params=params,
@@ -47,44 +45,41 @@ async def list_optical_alerts(
         onu_id=onu_id,
         status_filter=status_filter,
         severity_filter=severity,
-        actor=actor,
+        actor=current.to_actor(),
     )
 
 
 @router.get(
     "/{alert_id}",
     response_model=OpticalAlertEventRead,
-    dependencies=[Depends(require_admin)],
 )
 async def get_optical_alert(
     alert_id: UUID,
     service: OpticalAlertService = Depends(get_service),
-    actor: Actor = Depends(get_current_actor),
+    current: CurrentUser = Depends(require_admin),
 ) -> OpticalAlertEventRead:
-    return await service.get(alert_id, actor=actor)
+    return await service.get(alert_id, actor=current.to_actor())
 
 
 @router.post(
     "/{alert_id}/acknowledge",
     response_model=OpticalAlertEventRead,
-    dependencies=[Depends(require_admin)],
 )
 async def acknowledge_optical_alert(
     alert_id: UUID,
     service: OpticalAlertService = Depends(get_service),
-    actor: Actor = Depends(get_current_actor),
+    current: CurrentUser = Depends(require_admin),
 ) -> OpticalAlertEventRead:
-    return await service.acknowledge(alert_id, actor=actor)
+    return await service.acknowledge(alert_id, actor=current.to_actor())
 
 
 @router.post(
     "/{alert_id}/resolve",
     response_model=OpticalAlertEventRead,
-    dependencies=[Depends(require_admin)],
 )
 async def resolve_optical_alert(
     alert_id: UUID,
     service: OpticalAlertService = Depends(get_service),
-    actor: Actor = Depends(get_current_actor),
+    current: CurrentUser = Depends(require_admin),
 ) -> OpticalAlertEventRead:
-    return await service.resolve(alert_id, actor=actor)
+    return await service.resolve(alert_id, actor=current.to_actor())
