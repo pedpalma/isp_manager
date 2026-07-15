@@ -63,7 +63,7 @@ def test_olt_soft_delete_records_audit(real_client: TestClient) -> None:
     headers, _ = _bootstrap_admin(real_client)
 
     inv = setup_inventory(real_client, headers)
-    olt_id = UUID(inv["olt_id"])
+    olt_id = UUID(str(inv["olt_id"]))
 
     # act: soft-delete via API
     resp = real_client.delete(f"/api/v1/olts/{olt_id}", headers=headers)
