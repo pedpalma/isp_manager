@@ -20,8 +20,11 @@ from app.adapters.olt.base import (
     StepResult,
 )
 from app.adapters.olt.factory import get_olt_adapter
+from app.core.actor import Actor, system_actor
 from app.core.config import settings
 from app.db.session_sync import session_scope
+from app.domains.audit.enums import AuditAction, AuditResult
+from app.domains.audit.services.audit_log import record_sync as audit_record_sync
 from app.domains.collection.services._worker_common import (
     OltLockUnavailable,
     acquire_olt_advisory_lock,
@@ -530,7 +533,12 @@ def _render_command(
 
 # Marcadores de status intermediários
 def _mark_running(order_id: UUID) -> None:
-    """Transição validating -> running (start real do SSH)."""
+    """Transição validating -> running (start real do SSH).
+
+    Chamado uma única vez após fase 1 ter sucedido (garantia via
+    _lock_pending_order + retorno de _phase_load_lock_and_validate).
+    Não há race legítima, portanto o UPDATE é incondicional e o audit
+    STARTED é gravado sempre."""
     with session_scope() as db:
         db.execute(
             text(
@@ -538,10 +546,22 @@ def _mark_running(order_id: UUID) -> None:
                 UPDATE provisioning_order
                 SET status = CAST('running' AS provisioning_status_enum)
                 WHERE provisioning_order_id = :id
-                AND status = CAST('validating' AS provisioning_status_enum)
                 """
             ),
             {"id": str(order_id)},
+        )
+        actor, olt_id, onu_id = _resolve_order_actor_and_refs(db, order_id)
+        audit_record_sync(
+            db,
+            actor=actor,
+            action=AuditAction.PROVISIONING_ORDER_STARTED,
+            result=AuditResult.SUCCESS,
+            entity_type="provisioning_order",
+            entity_id=order_id,
+            olt_id=olt_id,
+            onu_id=onu_id,
+            provisioning_order_id=order_id,
+            after={"status": ProvisioningStatus.RUNNING.value},
         )
 
 
@@ -837,10 +857,67 @@ def _finalize(order_id: UUID, outcome: _PersistOutcome) -> None:
     )
 
 
+def _resolve_order_actor_and_refs(
+    db: Session, order_id: UUID
+) -> tuple[Actor, UUID | None, UUID | None]:
+    """Resolve ator humano + olt_id + onu_id da ordem para o audit_log.
+
+    provisioning_order.app_user_id é NOT NULL no DDL; se a linha existir,
+    o ator sempre é humano (nunca system_actor). Se a ordem desapareceu
+    (invariante violada), devolve system_actor + refs None para o audit
+    seguir best-effort."""
+    row = db.execute(
+        text(
+            """
+            SELECT o.olt_id, o.onu_id, o.app_user_id, u.username
+            FROM provisioning_order o
+            LEFT JOIN app_user u ON u.app_user_id = o.app_user_id
+            WHERE o.provisioning_order_id = :id
+            """
+        ),
+        {"id": str(order_id)},
+    ).first()
+    if row is None:
+        return system_actor(), None, None
+    olt_id, onu_id, user_id, username = row
+    if user_id is None:
+        return system_actor(), olt_id, onu_id
+    return (
+        Actor(actor_id=user_id, username=username or "unknown", is_system=False),
+        olt_id,
+        onu_id,
+    )
+
+
+# _mark_finished cobre 3 desfechos terminais NÃO-FALHA da ordem:
+# SUCCESS/PARTIAL (execução normal) e ROLLED_BACK (chamado por
+# _phase_rollback quando rollback executou ok). Mapeamento explícito
+# em vez de if/else para deixar a semântica óbvia em code review.
+_PROV_FINISHED_MAPPING: dict[ProvisioningStatus, tuple[AuditAction, AuditResult]] = {
+    ProvisioningStatus.SUCCESS: (
+        AuditAction.PROVISIONING_ORDER_FINISHED,
+        AuditResult.SUCCESS,
+    ),
+    ProvisioningStatus.PARTIAL: (
+        AuditAction.PROVISIONING_ORDER_FINISHED,
+        AuditResult.PARTIAL,
+    ),
+    ProvisioningStatus.ROLLED_BACK: (
+        AuditAction.PROVISIONING_ORDER_ROLLED_BACK,
+        AuditResult.SUCCESS,
+    ),
+}
+
+
 def _mark_failed(order_id: UUID, error_message: str) -> None:
-    """Melhor esforço: se a própria escrita falhar, apenas loga."""
+    """Melhor esforço: se a própria escrita (ou o audit_log) falhar, só
+    loga. Ordem pode ficar em RUNNING até ser recuperada pelo
+    detect_stale_jobs. Chamado tanto de falhas de fase quanto de rollback
+    comprometido; em ambos os casos o desfecho auditado é
+    PROVISIONING_ORDER_FINISHED / FAILURE."""
     try:
         with session_scope() as db:
+            actor, olt_id, onu_id = _resolve_order_actor_and_refs(db, order_id)
             db.execute(
                 text(
                     """
@@ -852,6 +929,19 @@ def _mark_failed(order_id: UUID, error_message: str) -> None:
                     """
                 ),
                 {"err": error_message[:1000], "id": str(order_id)},
+            )
+            audit_record_sync(
+                db,
+                actor=actor,
+                action=AuditAction.PROVISIONING_ORDER_FINISHED,
+                result=AuditResult.FAILURE,
+                entity_type="provisioning_order",
+                entity_id=order_id,
+                olt_id=olt_id,
+                onu_id=onu_id,
+                provisioning_order_id=order_id,
+                error_detail=error_message[:1000],
+                after={"status": ProvisioningStatus.FAILED.value},
             )
     except Exception as exc:
         log.exception(
@@ -867,7 +957,10 @@ def _mark_finished(
     *,
     failure_reason: str | None,
 ) -> None:
+    """Transição para status terminal SUCCESS / PARTIAL / ROLLED_BACK.
+    Cada um vira uma AuditAction distinta via _PROV_FINISHED_MAPPING."""
     with session_scope() as db:
+        actor, olt_id, onu_id = _resolve_order_actor_and_refs(db, order_id)
         db.execute(
             text(
                 """
@@ -883,6 +976,23 @@ def _mark_finished(
                 "err": (failure_reason[:1000] if failure_reason else None),
                 "id": str(order_id),
             },
+        )
+        action, audit_result = _PROV_FINISHED_MAPPING.get(
+            status,
+            (AuditAction.PROVISIONING_ORDER_FINISHED, AuditResult.SUCCESS),
+        )
+        audit_record_sync(
+            db,
+            actor=actor,
+            action=action,
+            result=audit_result,
+            entity_type="provisioning_order",
+            entity_id=order_id,
+            olt_id=olt_id,
+            onu_id=onu_id,
+            provisioning_order_id=order_id,
+            error_detail=failure_reason,
+            after={"status": status.value},
         )
 
 
