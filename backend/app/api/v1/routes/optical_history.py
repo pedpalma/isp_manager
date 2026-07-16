@@ -11,8 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_actor, require_admin
-from app.core.actor import Actor
+from app.api.deps import CurrentUser, require_admin
 from app.core.pagination import Page, PageParams, page_params
 from app.db.session import get_session
 from app.domains.optical.schemas.optical_reading import OpticalReadingRead
@@ -28,7 +27,6 @@ def get_service(session: AsyncSession = Depends(get_session)) -> OpticalHistoryS
 @router.get(
     "/{onu_id}/optical-history",
     response_model=Page[OpticalReadingRead],
-    dependencies=[Depends(require_admin)],
 )
 async def list_optical_history(
     onu_id: UUID,
@@ -36,12 +34,12 @@ async def list_optical_history(
     date_to: datetime | None = Query(default=None, alias="to"),
     params: PageParams = Depends(page_params),
     service: OpticalHistoryService = Depends(get_service),
-    actor: Actor = Depends(get_current_actor),
+    current: CurrentUser = Depends(require_admin),
 ) -> Page[OpticalReadingRead]:
     return await service.list_for_onu(
         onu_id=onu_id,
         params=params,
         date_from=date_from,
         date_to=date_to,
-        actor=actor,
+        actor=current.to_actor(),
     )
