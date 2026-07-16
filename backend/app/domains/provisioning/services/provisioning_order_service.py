@@ -357,6 +357,29 @@ class ProvisioningOrderService:
 
         try:
             await self._repo.add(order)
+            # flush popula PK e server_defaults sem commitar; refresh
+            # torna visíveis atributos populados pelo DB (status default,
+            # created_at, etc.) antes do audit e do build do response.
+            await self._session.flush()
+            await self._session.refresh(order)
+            await self._audit.record(
+                actor=actor,
+                action=AuditAction.PROVISIONING_ORDER_CREATED,
+                result=AuditResult.SUCCESS,
+                entity_type="provisioning_order",
+                entity_id=order.provisioning_order_id,
+                olt_id=payload.olt_id,
+                onu_id=onu_id_for_order,
+                provisioning_order_id=order.provisioning_order_id,
+                after={
+                    "status": "pending",
+                    "serial": payload.serial,
+                    "pon_port_id": str(payload.pon_port_id),
+                    "template_id": str(payload.provisioning_template_id),
+                    "idempotency_key": payload.idempotency_key,
+                },
+                extra={"payload_hash": payload_hash},
+            )
             await self._session.commit()
         except IntegrityError as exc:
             await self._session.rollback()
@@ -375,28 +398,6 @@ class ProvisioningOrderService:
             if constraint == _UQ_PROV_ACTIVE and onu_id_local is not None:
                 raise ProvisioningOrderActiveConflict(onu_id_local) from exc
             raise
-
-        await self._session.refresh(order)
-
-        await self._audit.record(
-            actor=actor,
-            action=AuditAction.PROVISIONING_ORDER_CREATED,
-            result=AuditResult.SUCCESS,
-            entity_type="provisioning_order",
-            entity_id=order.provisioning_order_id,
-            olt_id=payload.olt_id,
-            onu_id=onu_id_for_order,
-            provisioning_order_id=order.provisioning_order_id,
-            after={
-                "status": "pending",
-                "serial": payload.serial,
-                "pon_port_id": str(payload.pon_port_id),
-                "template_id": str(payload.provisioning_template_id),
-                "idempotency_key": payload.idempotency_key,
-            },
-            extra={"payload_hash": payload_hash},
-        )
-        await self._session.commit()
 
         log.info(
             "provisioning_order.created",
