@@ -27,8 +27,7 @@ import structlog
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_actor, require_admin
-from app.core.actor import Actor
+from app.api.deps import CurrentUser, require_admin
 from app.core.pagination import Page, PageParams, page_params
 from app.db.session import get_session
 from app.domains.collection.enums import JobStatus
@@ -52,52 +51,50 @@ def get_service(session: AsyncSession = Depends(get_session)) -> CollectionJobSe
 @router.get(
     "",
     response_model=Page[CollectionJobRead],
-    dependencies=[Depends(require_admin)],
 )
 async def list_collection_jobs(
     olt_id: UUID | None = Query(default=None),
     status_filter: JobStatus | None = Query(default=None, alias="status"),
     params: PageParams = Depends(page_params),
     service: CollectionJobService = Depends(get_service),
-    actor: Actor = Depends(get_current_actor),
+    current: CurrentUser = Depends(require_admin),
 ) -> Page[CollectionJobRead]:
     return await service.list_page(
         params=params,
         olt_id=olt_id,
         status_filter=status_filter,
-        actor=actor,
+        actor=current.to_actor(),
     )
 
 
 @router.get(
     "/{collection_job_id}",
     response_model=CollectionJobDetailRead,
-    dependencies=[Depends(require_admin)],
 )
 async def get_collection_job(
     collection_job_id: UUID,
     service: CollectionJobService = Depends(get_service),
-    actor: Actor = Depends(get_current_actor),
+    current: CurrentUser = Depends(require_admin),
 ) -> CollectionJobDetailRead:
-    return await service.get_detail(collection_job_id, actor=actor)
+    return await service.get_detail(collection_job_id, actor=current.to_actor())
 
 
 @router.post(
     "",
     response_model=CollectionJobDetailRead,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_admin)],
 )
 async def create_discovery_job(
     payload: CollectionJobCreate,
     service: CollectionJobService = Depends(get_service),
-    actor: Actor = Depends(get_current_actor),
+    current: CurrentUser = Depends(require_admin),
 ) -> CollectionJobDetailRead:
     """Dispara descoberta de ONUs não provisionadas para uma OLT.
 
     Cria job em 'pending', commita, enfileira a task Celery, refecha o
     detalhe atualizado e retorna. Sob testes com task_always_eager=True
     o detalhe já reflete status terminal (success/partial/failed)."""
+    actor = current.to_actor()
     job = await service.create_discovery_job(
         olt_id=payload.olt_id,
         actor=actor,
@@ -120,18 +117,18 @@ async def create_discovery_job(
     "/signal-reading",
     response_model=CollectionJobDetailRead,
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_admin)],
 )
 async def create_signal_reading_job(
     payload: CollectionJobCreate,
     service: CollectionJobService = Depends(get_service),
-    actor: Actor = Depends(get_current_actor),
+    current: CurrentUser = Depends(require_admin),
 ) -> CollectionJobDetailRead:
     """Dispara coleta de potência óptica para uma OLT.
 
     Mesmo padrão da rota de discovery: cria + enqueue + refetch.
     Idempotência concorrente por uq_collection_job_running (compartilhada
     entre discovery e signal_reading)."""
+    actor = current.to_actor()
     job = await service.create_signal_reading_job(
         olt_id=payload.olt_id,
         actor=actor,
