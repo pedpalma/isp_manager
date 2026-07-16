@@ -178,6 +178,17 @@ class CollectionJobService:
         )
         try:
             await self._repo.add(job)
+            await self._session.flush()
+            await self._session.refresh(job)
+            await self._audit.record(
+                actor=actor,
+                action=AuditAction.COLLECTION_JOB_CREATED,
+                result=AuditResult.SUCCESS,
+                entity_type="collection_job",
+                entity_id=job.collection_job_id,
+                olt_id=olt_id,
+                extra={"job_type": JOB_TYPE_SIGNAL_READING, "trigger_type": "manual"},
+            )
             await self._session.commit()
         except IntegrityError as exc:
             await self._session.rollback()
@@ -185,19 +196,6 @@ class CollectionJobService:
             if constraint == _UQ_RUNNING:
                 raise CollectionJobConflict(olt_id, JOB_TYPE_SIGNAL_READING) from exc
             raise
-
-        await self._session.refresh(job)
-
-        await self._audit.record(
-            actor=actor,
-            action=AuditAction.COLLECTION_JOB_CREATED,
-            result=AuditResult.SUCCESS,
-            entity_type="collection_job",
-            entity_id=job.collection_job_id,
-            olt_id=olt_id,
-            extra={"job_type": JOB_TYPE_SIGNAL_READING, "trigger_type": "manual"},
-        )
-        await self._session.commit()
 
         log.info(
             "collection_job.created",
