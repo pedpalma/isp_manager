@@ -120,6 +120,20 @@ class CollectionJobService:
         )
         try:
             await self._repo.add(job)
+            # flush popula server_defaults (collection_job_id, status,
+            # created_at); refresh garante visibilidade em atributos
+            # ORM antes do audit e do build do response.
+            await self._session.flush()
+            await self._session.refresh(job)
+            await self._audit.record(
+                actor=actor,
+                action=AuditAction.COLLECTION_JOB_CREATED,
+                result=AuditResult.SUCCESS,
+                entity_type="collection_job",
+                entity_id=job.collection_job_id,
+                olt_id=olt_id,
+                extra={"job_type": JOB_TYPE_DISCOVERY, "trigger_type": "manual"},
+            )
             await self._session.commit()
         except IntegrityError as exc:
             await self._session.rollback()
@@ -127,20 +141,6 @@ class CollectionJobService:
             if constraint == _UQ_RUNNING:
                 raise CollectionJobConflict(olt_id, JOB_TYPE_DISCOVERY) from exc
             raise
-
-        # Refresh para popular server_defaults (collection_job_id, status,
-        # created_at).
-        await self._session.refresh(job)
-        await self._audit.record(
-            actor=actor,
-            action=AuditAction.COLLECTION_JOB_CREATED,
-            result=AuditResult.SUCCESS,
-            entity_type="collection_job",
-            entity_id=job.collection_job_id,
-            olt_id=olt_id,
-            extra={"job_type": JOB_TYPE_DISCOVERY, "trigger_type": "manual"},
-        )
-        await self._session.commit()
 
         log.info(
             "collection_job.created",
